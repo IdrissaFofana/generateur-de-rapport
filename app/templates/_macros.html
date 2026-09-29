@@ -1,0 +1,44 @@
+{% macro statut_fichier(f) %}
+{% if f.statut == "ok" %}<span class="pastille ok">Analysé</span>
+{% elif f.statut == "erreur" %}<span class="pastille erreur" title="{{ f.erreur }}">Erreur</span>
+{% elif f.statut == "en_cours" %}<span class="pastille cours">Analyse en cours…</span>
+{% else %}<span class="pastille attente">En file d'attente</span>{% endif %}
+{% endmacro %}
+
+{% macro pastille_etat(etat) %}
+{% set classes = {"Validé": "ok", "Brouillon": "cours", "Prêt": "ok", "Partiel": "alerte", "Incomplet": "attente"} %}
+<span class="pastille {{ classes.get(etat, 'attente') }}">{{ etat }}</span>
+{% endmacro %}
+
+{% macro couverture(mdr) %}
+{% if mdr is none %}<span class="aide">non souscrit</span>
+{% elif not mdr.tenant_trouve %}<span class="pastille erreur" title="Aucune donnée pour ce tenant dans les hebdos déposés">Aucune donnée</span>
+{% else %}
+<span class="couverture {{ 'alerte' if mdr.manquants }}" title="{{ 'Jours manquants : ajouter l\'hebdo suivant' if mdr.manquants else 'Mois entièrement couvert' }}">
+  <span class="barre-j"><i style="width:{{ (100 * mdr.jours / mdr.total) | round | int if mdr.total else 0 }}%"></i></span>
+  <span class="n">{{ mdr.jours }}/{{ mdr.total }} jours</span>
+</span>
+{% endif %}
+{% endmacro %}
+
+{% macro selecteur_mois(action, annee, mois) %}
+{% set pa, pm = (annee - 1, 12) if mois == 1 else (annee, mois - 1) %}
+{% set sa, sm = (annee + 1, 1) if mois == 12 else (annee, mois + 1) %}
+<div class="periode">
+  <a href="{{ action }}?mois={{ pm }}&annee={{ pa }}" title="Mois précédent" aria-label="Mois précédent">‹</a>
+  <form method="get" action="{{ action }}">
+    <select name="mois" aria-label="Mois">{% for m in MOIS_FR %}<option value="{{ loop.index }}" {{ 'selected' if loop.index == mois }}>{{ m | capitalize }}</option>{% endfor %}</select>
+    <select name="annee" aria-label="Année">{% for a in range(annee - 2, annee + 2) %}<option {{ 'selected' if a == annee }}>{{ a }}</option>{% endfor %}</select>
+    <button type="submit">Afficher</button>
+  </form>
+  <a href="{{ action }}?mois={{ sm }}&annee={{ sa }}" title="Mois suivant" aria-label="Mois suivant">›</a>
+</div>
+{% endmacro %}
+
+{% macro zone_depot(titre, detail) %}
+<label class="depot">
+  <input type="file" name="fichiers" accept="application/pdf,.pdf" multiple required>
+  <span class="icone"><svg viewBox="0 0 24 24"><path d="M12 16V4M6.5 9.5 12 4l5.5 5.5M4 20h16"/></svg></span>
+  <span><strong>{{ titre }}</strong><span class="aide">{{ detail }}</span><span class="choisis"></span></span>
+</label>
+{% endmacro %}

@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% from "_macros.html" import selecteur_mois, couverture, zone_depot %}
+{% block titre %}{{ client.nom }} — {{ fmt_mois(annee, mois) }}{% endblock %}
+{% block contenu %}
+<a class="retour" href="/?annee={{ annee }}&mois={{ mois }}">Tableau de bord</a>
+<div class="en-tete">
+  <div><div class="surtitre">{{ fmt_mois(annee, mois) }}</div>
+  <h1>{{ client.nom }}</h1>
+  <div class="meta"><span class="pastille profil">{{ client.profil }}</span>
+  {% if client.avec_mdr %}<span>Tenant(s) MDR {% for t in client.tenants_mdr %}<code>{{ t }}</code> {% endfor %}</span>{% endif %}</div></div>
+  {{ selecteur_mois("/clients/" ~ client.id ~ "/aller", annee, mois) }}
+</div>
+
+<div class="grille-2" style="margin-bottom:20px">
+  <div class="carte">
+    <div class="titre-carte"><h2><span class="section-num">01</span>Données MDR</h2></div>
+    {% if not client.avec_mdr %}
+      <p class="aide" style="margin:0">Ce client n'a pas souscrit le service MDR : le rapport ne contiendra pas de section MDR.</p>
+    {% else %}
+      <div style="margin-bottom:12px">{{ couverture(mdr) }}</div>
+      {% if mdr and mdr.manquants %}<p class="aide" style="margin:0">Jours manquants : <span class="mono">{{ mdr.manquants[0] | fdate }} → {{ mdr.manquants[-1] | fdate }}</span>.
+        Les hebdos se déposent une seule fois pour tous les clients, dans <a href="/hebdos?annee={{ annee }}&mois={{ mois }}">Hebdos MDR</a>.</p>
+      {% elif mdr and mdr.tenant_trouve %}<p class="aide" style="margin:0">Le mois est entièrement couvert par les rapports hebdomadaires.</p>{% endif %}
+    {% endif %}
+  </div>
+  <div class="carte">
+    <div class="titre-carte"><h2><span class="section-num">02</span>Rapport du mois</h2></div>
+    {% set visibles = rapports if utilisateur.peut("operateur") else rapports | selectattr("statut", "equalto", "valide") | list %}
+    {% if visibles %}
+      {% set r = visibles[0] %}
+      <p class="en-ligne" style="gap:12px"><span class="pastille {{ 'ok' if r.statut == 'valide' else 'cours' }}">{{ "Validé" if r.statut == "valide" else "Brouillon" }}</span>
+      <span class="etiquette">v{{ r.version }}</span> <span class="aide mono">{{ (r.valide_le or r.cree_le) | fdatetime }}</span></p>
+      <div class="en-ligne">
+        <a class="bouton fleche" href="/rapports/{{ r.id }}">{{ "Ouvrir" if r.statut == "valide" or not utilisateur.peut("validateur") else "Relire et modifier" }}</a>
+        {% if r.statut == "valide" %}<a class="bouton secondaire" href="/rapports/{{ r.id }}/pdf">Télécharger le PDF</a>{% endif %}
+      </div>
+    {% else %}
+      <p class="aide">Aucun rapport {{ "créé" if utilisateur.peut("operateur") else "validé" }} pour ce mois.</p>
+      {% if utilisateur.peut("operateur") %}
+      <form method="post" action="/clients/{{ client.id }}/{{ annee }}/{{ mois }}/rapports">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="bouton fleche" type="submit">Créer le brouillon du rapport</button>
+        <p class="aide" style="margin:10px 0 0">Possible même si des données manquent : les sections concernées seront marquées « en attente ».</p>
+      </form>
+      {% endif %}
+    {% endif %}
+  </div>
+</div>
+
+<div class="carte">
+  <div class="titre-carte"><h2><span class="section-num">03</span>Exports Kaspersky Security Center</h2></div>
+  {% if utilisateur.peut("operateur") %}
+  <form method="post" action="/clients/{{ client.id }}/{{ annee }}/{{ mois }}/exports" enctype="multipart/form-data" class="formulaire-depot" style="margin-bottom:18px">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    {{ zone_depot("Glissez les exports PDF ici, ou cliquez pour les choisir",
+                  "Déposez les 3 exports en une fois : leur type est reconnu automatiquement. Un nouvel export du même type remplace le précédent.") }}
+    <button class="bouton" type="submit">Déposer</button>
+  </form>
+  {% endif %}
+  {% include "_exports_liste.html" %}
+</div>
+
+<div class="carte">
+  <div class="titre-carte"><h2><span class="section-num">04</span>Aperçu des chiffres du mois</h2></div>
+  <div hx-get="/clients/{{ client.id }}/{{ annee }}/{{ mois }}/apercu" hx-trigger="load" hx-swap="innerHTML">
+    <p class="aide">Calcul en cours…</p>
+  </div>
+</div>
+{% endblock %}

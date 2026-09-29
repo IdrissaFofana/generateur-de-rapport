@@ -1,0 +1,6 @@
+.env
+donnees/
+app/moteur/.cache/
+__pycache__/
+*.pyc
+.venv/

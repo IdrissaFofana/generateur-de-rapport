@@ -1,0 +1,38 @@
+{% from "_macros.html" import pastille_etat, couverture %}
+<div id="tableau" {% if en_cours %}hx-get="/tableau/liste?annee={{ annee }}&mois={{ mois }}" hx-trigger="every 4s" hx-swap="outerHTML"{% endif %}>
+{% set total = etats | length %}
+{% set compte = {} %}
+{% for e in etats %}{% set _ = compte.update({e.etat: compte.get(e.etat, 0) + 1}) %}{% endfor %}
+<div class="indicateurs">
+  <div class="indicateur marine"><div class="valeur">{{ total }}</div><div class="libelle">Clients actifs</div></div>
+  <div class="indicateur ok"><div class="valeur">{{ compte.get("Validé", 0) }}<small>/{{ total }}</small></div><div class="libelle">Rapports validés</div>
+    <div class="jauge"><i style="width:{{ (100 * compte.get('Validé', 0) / total) | round | int if total else 0 }}%"></i></div></div>
+  <div class="indicateur cours"><div class="valeur">{{ compte.get("Brouillon", 0) }}</div><div class="libelle">Brouillons à relire</div></div>
+  <div class="indicateur ok"><div class="valeur">{{ compte.get("Prêt", 0) }}</div><div class="libelle">Prêts à rédiger</div></div>
+  <div class="indicateur alerte"><div class="valeur">{{ compte.get("Partiel", 0) + compte.get("Incomplet", 0) }}</div><div class="libelle">Données manquantes</div></div>
+</div>
+
+<div class="tableau">
+<table class="liste">
+<thead><tr><th>Client</th><th>Données MDR du mois</th><th title="Protection · Menaces · Vulnérabilités">Exports KSC <span style="letter-spacing:.04em">P · M · V</span></th><th>Rapport</th><th></th></tr></thead>
+<tbody>
+{% for e in etats %}
+{% set c = e.client %}
+<tr>
+  <td><div class="client">{{ c.nom }}</div><span class="pastille profil">{{ c.profil }}</span></td>
+  <td>{{ couverture(e.mdr) }}</td>
+  <td>{% if c.avec_ksc %}
+    <span class="flux">{% for t, lettre, nom in [("protection", "P", "Protection"), ("menaces", "M", "Menaces"), ("vulnerabilites", "V", "Vulnérabilités")] %}
+      <span class="etape {{ e.ksc[t] }}" title="{{ nom }} : {{ {'ok': 'reçu', 'cours': 'analyse en cours', 'attente': 'en attente'}[e.ksc[t]] }}">{{ lettre }}</span>{% endfor %}</span>
+    {% else %}<span class="flux-sans">non souscrit</span>{% endif %}
+    {% if e.erreurs %}<div style="margin-top:6px"><span class="pastille erreur">{{ e.erreurs | length }} fichier(s) en erreur</span></div>{% endif %}</td>
+  <td>{{ pastille_etat(e.etat) }}{% if e.rapport %} <span class="etiquette">v{{ e.rapport.version }}</span>{% endif %}</td>
+  <td class="fin"><a class="bouton petit {{ '' if e.etat in ('Prêt', 'Brouillon') else 'secondaire' }} fleche" href="/clients/{{ c.id }}/{{ annee }}/{{ mois }}">Ouvrir</a></td>
+</tr>
+{% else %}
+<tr><td colspan="5" class="vide">Aucun client actif.{% if utilisateur.peut("admin") %} <a href="/admin/clients/nouveau">Créer un client</a>{% endif %}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+</div>

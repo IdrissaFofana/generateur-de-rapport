@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block titre %}Utilisateurs{% endblock %}
+{% block contenu %}
+<div class="en-tete">
+  <div><div class="surtitre">Administration</div><h1>Utilisateurs</h1>
+  <p class="sous-titre">
+    <strong>Lecteur</strong> consulte et télécharge les rapports validés ·
+    <strong>Opérateur</strong> dépose les fichiers et prépare les brouillons ·
+    <strong>Validateur</strong> relit, modifie et valide ·
+    <strong>Administrateur</strong> gère en plus les comptes et les clients.
+  </p></div>
+</div>
+
+<div class="carte">
+  <div class="titre-carte"><h2>Nouveau compte</h2></div>
+  <form method="post" action="/admin/utilisateurs" class="grille" style="align-items:end">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div><label>Nom</label><input type="text" name="nom" required></div>
+    <div><label>Adresse e-mail</label><input type="email" name="email" required></div>
+    <div><label>Rôle</label><select name="role">{% for cle, lib in ROLES.items() %}<option value="{{ cle }}" {{ 'selected' if cle == 'operateur' }}>{{ lib }}</option>{% endfor %}</select></div>
+    <div><button class="bouton" type="submit" style="width:100%">Créer le compte</button></div>
+  </form>
+  <p class="aide" style="margin:12px 0 0">Un mot de passe provisoire est affiché après la création ; l'utilisateur devra le changer à sa première connexion.</p>
+</div>
+
+<div class="tableau">
+<table class="liste">
+<thead><tr><th>Nom</th><th>E-mail</th><th>Rôle</th><th>Actif</th><th>Dernière connexion</th><th></th></tr></thead>
+<tbody>
+{% for x in liste %}
+<tr class="{{ '' if x.actif else 'inactif' }}">
+  <td><form method="post" action="/admin/utilisateurs/{{ x.id }}" id="f{{ x.id }}"><input type="hidden" name="csrf" value="{{ csrf }}"></form>
+      <input type="text" name="nom" value="{{ x.nom }}" form="f{{ x.id }}" required style="min-width:150px"></td>
+  <td>{{ x.email }}{% if x.id == utilisateur.id %} <span class="etiquette">vous</span>{% endif %}</td>
+  <td><select name="role" form="f{{ x.id }}" style="min-width:170px">{% for cle, lib in ROLES.items() %}<option value="{{ cle }}" {{ 'selected' if cle == x.role }}>{{ lib }}</option>{% endfor %}</select></td>
+  <td><input type="checkbox" name="actif" value="true" form="f{{ x.id }}" {{ 'checked' if x.actif }} aria-label="Compte actif"></td>
+  <td class="date">{{ x.derniere_connexion | fdatetime }}</td>
+  <td class="fin"><span class="en-ligne" style="justify-content:flex-end;flex-wrap:nowrap">
+    <button class="bouton petit" type="submit" form="f{{ x.id }}">Enregistrer</button>
+    <form method="post" action="/admin/utilisateurs/{{ x.id }}/reinitialiser" style="display:inline"
+          onsubmit="return confirm('Générer un nouveau mot de passe provisoire pour {{ x.email }} ?')">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="bouton petit fantome" type="submit" title="Générer un nouveau mot de passe provisoire">Réinitialiser</button>
+    </form></span>
+  </td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% endblock %}

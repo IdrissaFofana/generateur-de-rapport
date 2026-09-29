@@ -1,0 +1,139 @@
+/* Rapport mensuel de sécurité — charte ESAY (WeasyPrint, A4) */
+@font-face { font-family: "Carlito"; src: url("polices/Carlito-Regular.ttf"); }
+@font-face { font-family: "Carlito"; src: url("polices/Carlito-Bold.ttf"); font-weight: bold; }
+@font-face { font-family: "Carlito"; src: url("polices/Carlito-Italic.ttf"); font-style: italic; }
+@font-face { font-family: "Carlito"; src: url("polices/Carlito-BoldItalic.ttf"); font-weight: bold; font-style: italic; }
+
+:root {
+  --c1: #00507A;        /* bleu marine ESAY */
+  --c2: #0099BA;        /* bleu sarcelle */
+  --c3: #8DC21F;        /* vert ESAY */
+  --encre: #1F2933;
+  --encre-douce: #5B6770;
+  --fond-clair: #EEF4F8;
+  --fond-zebre: #F6F9FB;
+  --filet: #D5DDE3;
+  --critique: #C0392B;
+  --eleve: #D35400;
+  --modere: #B7791F;
+  --bon: #3C8D2F;
+  --normale: #1E6FA8;
+  --attente: #5B6770;
+}
+
+@page {
+  size: A4;
+  margin: 2.6cm 2cm 2cm 2cm;
+  @top-center { content: element(entete); width: 100%; vertical-align: bottom; padding-bottom: 0.35cm; }
+  /* le texte du pied de page est défini dans le gabarit (nom du prestataire) */
+  @bottom-center { font-family: "Carlito", sans-serif; font-size: 8pt; color: #5B6770; }
+}
+@page :first {
+  @top-center { content: none; }
+  @bottom-center { content: none; }
+}
+
+html { font-family: "Carlito", "Calibri", sans-serif; font-size: 10.5pt; color: var(--encre); line-height: 1.32; }
+body { margin: 0; }
+p { margin: 0 0 6pt; orphans: 3; widows: 3; }
+strong { font-weight: bold; }
+
+/* En-tête courant */
+.entete { position: running(entete); display: flex; justify-content: space-between; align-items: flex-end;
+          border-bottom: 1pt solid var(--c3); padding-bottom: 5pt; }
+.entete img { height: 0.95cm; }
+.entete .droite { text-align: right; font-size: 8.5pt; color: var(--encre-douce); line-height: 1.25; }
+
+/* Page de garde */
+.couverture { page-break-after: always; }
+.couverture .logo { height: 2.4cm; margin: 0.4cm 0 2.1cm; }
+.bande { background: var(--c1); color: #fff; padding: 0.65cm 0.75cm; border-bottom: 3pt solid var(--c3); }
+.bande .t1 { font-size: 28pt; font-weight: bold; line-height: 1.1; }
+.bande .t2 { font-size: 28pt; font-weight: bold; line-height: 1.1; color: var(--c3); }
+.bande .t3 { font-size: 15pt; margin-top: 12pt; }
+table.infos { width: 100%; margin-top: 0.9cm; border-collapse: collapse; }
+table.infos td { padding: 5pt 8pt; border-top: 0.5pt solid var(--filet); border-bottom: 0.5pt solid var(--filet); }
+table.infos td:first-child { width: 4.5cm; background: var(--fond-clair); color: var(--c1); font-weight: bold; }
+.risque-garde { width: 9cm; margin: 1.4cm auto 0; border: 1.5pt solid; text-align: center; padding: 8pt 10pt; }
+.risque-garde .libelle { font-size: 10pt; color: var(--encre-douce); }
+.risque-garde .niveau { font-size: 22pt; font-weight: bold; }
+.risque-garde .note { font-size: 8.5pt; font-style: italic; color: var(--encre-douce); }
+.confidentiel { text-align: center; font-size: 8.5pt; font-style: italic; color: var(--encre-douce); margin-top: 1.8cm; }
+
+/* Sommaire */
+.sommaire { page-break-after: always; }
+.sommaire ul { list-style: none; padding: 0; margin: 0; }
+.sommaire li { margin: 0 0 5pt; }
+.sommaire li.n2 { margin-left: 0.5cm; }
+.sommaire a { color: var(--encre); text-decoration: none; }
+.sommaire a::after { content: leader(".") target-counter(attr(href), page); color: var(--encre); }
+
+/* Titres */
+h1, .titre-sommaire { font-size: 16pt; font-weight: bold; color: var(--c1); margin: 18pt 0 8pt; padding-bottom: 3pt;
+     border-bottom: 1.5pt solid var(--c3); page-break-after: avoid; break-after: avoid; }
+h2 { font-size: 12.5pt; color: var(--c2); margin: 12pt 0 5pt; page-break-after: avoid; break-after: avoid; }
+.annexes { page-break-before: always; }
+
+/* Tableaux */
+table.donnees { width: 100%; border-collapse: collapse; margin: 2pt 0 10pt; font-size: 9.5pt; }
+table.donnees.petit { font-size: 8.5pt; }
+table.donnees th { background: var(--c1); color: #fff; font-weight: bold; text-align: left; padding: 4pt 6pt; }
+table.donnees td { padding: 3.5pt 6pt; border-bottom: 0.5pt solid var(--filet); vertical-align: middle; }
+table.donnees tr:nth-child(even) td { background: var(--fond-zebre); }
+table.donnees tr { page-break-inside: avoid; break-inside: avoid; }
+table.donnees thead { display: table-header-group; }
+.c { text-align: center !important; }
+.justif { display: block; color: var(--encre-douce); font-size: 8.5pt; margin-top: 1pt; }
+.note { font-size: 8.5pt; font-style: italic; color: var(--encre-douce); margin: -6pt 0 8pt; }
+
+/* Statuts */
+.st { font-weight: bold; white-space: nowrap; }
+.st::before { content: "● "; }
+.st-critique, .st-urgente, .st-tres-eleve, .st-urgent { color: var(--critique); }
+.st-eleve, .st-haute, .st-elevee, .st-action-requise { color: var(--eleve); }
+.st-modere, .st-avertissement, .st-a-surveiller { color: var(--modere); }
+.st-normale { color: var(--normale); }
+.st-faible, .st-ok, .st-bon, .st-normal, .st-aucun, .st-realisee { color: var(--bon); }
+.st-en-attente, .st-a-faire, .st-en-cours, .st-abandonnee { color: var(--attente); }
+
+/* Tuiles d'indicateurs */
+.tuiles { display: flex; gap: 4pt; margin: 6pt 0 10pt; page-break-inside: avoid; }
+.tuile { flex: 1; background: var(--fond-clair); border-top: 2.5pt solid var(--c1); text-align: center; padding: 7pt 4pt 6pt; }
+.tuile .valeur { font-size: 20pt; font-weight: bold; color: var(--c1); line-height: 1.1; }
+.tuile .libelle { font-size: 8.5pt; color: var(--encre-douce); }
+
+/* Encadrés */
+.encadre { background: var(--fond-clair); border-left: 3pt solid var(--c2); padding: 6pt 10pt 4pt 11pt;
+           margin: 4pt 0 10pt; page-break-inside: avoid; break-inside: avoid; }
+.encadre .titre { font-weight: bold; margin-bottom: 3pt; }
+.encadre p { margin-bottom: 3pt; }
+.encadre ul { margin: 0 0 3pt; padding-left: 14pt; }
+.encadre li { margin-bottom: 1pt; }
+.encadre.attente { background: #F3F4F6; }
+
+/* Couleurs par statut : encadrés, tuiles, cadre de garde */
+.k-critique, .k-urgente { --k: var(--critique); }
+.k-eleve, .k-haute { --k: var(--eleve); }
+.k-modere, .k-a-surveiller, .k-avertissement { --k: var(--modere); }
+.k-faible, .k-bon { --k: var(--bon); }
+.k-attente { --k: var(--attente); }
+.k-info { --k: var(--c2); }
+.encadre[class*="k-"] { border-left-color: var(--k); }
+.encadre[class*="k-"] .titre { color: var(--k); }
+.tuile[class*="k-"] { border-top-color: var(--k); }
+.tuile[class*="k-"] .valeur { color: var(--k); }
+.risque-garde[class*="k-"] { border-color: var(--k); }
+.risque-garde[class*="k-"] .niveau { color: var(--k); }
+
+/* Graphiques */
+figure { margin: 4pt 0 10pt; text-align: center; page-break-inside: avoid; }
+figure svg { width: 100%; height: auto; }
+figure.etroit svg { width: 92%; }
+figcaption { font-size: 8.5pt; font-style: italic; color: var(--encre-douce); margin-top: 2pt; }
+
+ul.puces { margin: 0 0 6pt; padding-left: 16pt; }
+ul.puces li { margin-bottom: 3pt; }
+.signature { margin-top: 22pt; }
+.signature .nom { font-weight: bold; color: var(--c1); }
+.signature .societe { color: var(--encre-douce); }
+.nobr { white-space: nowrap; }

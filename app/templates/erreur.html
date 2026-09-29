@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block titre %}{{ titre }}{% endblock %}
+{% block contenu %}
+<div class="erreur-page">
+  <img src="/static/logo-transparent.png" alt="ESAY Corporation" style="height:40px;margin-bottom:40px">
+  <div class="code">{{ {"Accès refusé": "403", "Page introuvable": "404"}.get(titre, "—") }}</div>
+  <h1>{{ titre }}</h1>
+  <p class="sous-titre" style="margin-bottom:24px">{{ message }}</p>
+  <a class="bouton secondaire" href="/">← Retour au tableau de bord</a>
+</div>
+{% endblock %}

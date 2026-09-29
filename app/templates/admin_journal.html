@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block titre %}Journal{% endblock %}
+{% block contenu %}
+<div class="en-tete">
+  <div><div class="surtitre">Administration</div><h1>Journal</h1>
+  <p class="sous-titre">Les 300 dernières actions effectuées sur la plateforme.</p></div>
+</div>
+<div class="tableau">
+<table class="liste">
+<thead><tr><th>Date</th><th>Utilisateur</th><th>Action</th><th>Détail</th></tr></thead>
+<tbody>
+{% for l in lignes %}
+<tr><td class="date">{{ l.quand | fdatetime }}</td><td>{{ l.utilisateur.nom if l.utilisateur else "—" }}</td>
+<td><span class="etiquette">{{ l.action }}</span></td><td>{{ l.detail }}</td></tr>
+{% else %}<tr><td colspan="4" class="vide">Aucune action enregistrée.</td></tr>{% endfor %}
+</tbody>
+</table>
+</div>
+{% endblock %}

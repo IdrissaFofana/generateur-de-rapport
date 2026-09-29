@@ -1,0 +1,37 @@
+{% from "_macros.html" import statut_fichier, couverture %}
+<div id="hebdos" {% if en_cours %}hx-get="/hebdos/liste?annee={{ annee }}&mois={{ mois }}" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
+<h2>Couverture de {{ fmt_mois(annee, mois) }} par client</h2>
+<div class="tableau">
+<table class="liste">
+<thead><tr><th>Client</th><th>Tenants</th><th>Jours couverts</th><th>Jours manquants</th></tr></thead>
+<tbody>
+{% for c, cov in couvertures %}
+<tr><td class="client">{{ c.nom }}</td><td>{% for t in c.tenants_mdr %}<code>{{ t }}</code> {% endfor %}</td>
+<td>{{ couverture(cov) }}</td>
+<td class="date">{% if cov.manquants %}{{ cov.manquants[0] | fdate }} → {{ cov.manquants[-1] | fdate }}{% else %}—{% endif %}</td></tr>
+{% else %}<tr><td colspan="4" class="vide">Aucun client MDR actif.</td></tr>{% endfor %}
+</tbody>
+</table>
+</div>
+
+<h2>Fichiers déposés</h2>
+<div class="tableau">
+<table class="liste">
+<thead><tr><th>Période</th><th>Fichier</th><th>État</th><th>Déposé</th><th></th></tr></thead>
+<tbody>
+{% for h in hebdos %}
+<tr>
+  <td class="date">{% if h.debut %}{{ h.debut | fdate }} → {{ h.fin | fdate }}{% if h.debut in doublons %} <span class="etiquette alerte" title="Plusieurs fichiers pour la même semaine : le plus récent est utilisé">doublon</span>{% endif %}{% else %}—{% endif %}</td>
+  <td><a class="fichier" href="/fichiers/hebdo/{{ h.id }}">{{ h.fichier }}</a>{% if h.erreur %}<br><span class="aide">{{ h.erreur }}</span>{% endif %}</td>
+  <td>{{ statut_fichier(h) }}</td>
+  <td class="date">{{ h.depose_le | fdatetime }}{% if h.depose_par %}<br><span class="aide">{{ h.depose_par.nom }}</span>{% endif %}</td>
+  <td class="fin">{% if utilisateur.peut("operateur") %}
+    <form method="post" action="/hebdos/{{ h.id }}/supprimer" onsubmit="return confirm('Supprimer {{ h.fichier }} ?')">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><button class="bouton petit danger" type="submit">Supprimer</button></form>
+  {% endif %}</td>
+</tr>
+{% else %}<tr><td colspan="5" class="vide">Aucun rapport hebdomadaire déposé.</td></tr>{% endfor %}
+</tbody>
+</table>
+</div>
+</div>

@@ -1,0 +1,28 @@
+{% from "_macros.html" import statut_fichier %}
+<div id="exports" {% if en_cours %}hx-get="/clients/{{ client.id }}/{{ annee }}/{{ mois }}/exports" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
+<div class="tableau">
+<table class="liste">
+<thead><tr><th>Type</th><th>Fichier</th><th>Généré (KSC)</th><th>État</th><th>Déposé</th><th></th></tr></thead>
+<tbody>
+{% for t, libelle in TYPES_EXPORT.items() if t not in retenus and not exports | selectattr("type", "equalto", t) | list %}
+<tr><td><strong>{{ libelle }}</strong></td><td colspan="5"><span class="pastille attente">Non transmis</span></td></tr>
+{% endfor %}
+{% for e in exports %}
+<tr class="{{ 'inactif' if e.remplace }}">
+  <td><strong>{{ TYPES_EXPORT.get(e.type, "À déterminer") }}</strong>{% if e.remplace %}<br><span class="aide">remplacé par un dépôt plus récent</span>{% endif %}</td>
+  <td><a class="fichier" href="/fichiers/export/{{ e.id }}">{{ e.fichier }}</a>{% if e.erreur %}<br><span class="aide" style="color:var(--critique)">{{ e.erreur }}</span>{% endif %}</td>
+  <td class="date">{{ e.genere_le | fdatetime }}
+    {% if e.genere_le and (e.genere_le.date() < debut or (e.genere_le.date() - fin).days > 20) %}<br><span class="etiquette alerte" title="Export généré hors de la période : il sera ignoré">hors période</span>{% endif %}</td>
+  <td>{{ statut_fichier(e) }}</td>
+  <td class="date">{{ e.depose_le | fdatetime }}{% if e.depose_par %}<br><span class="aide">{{ e.depose_par.nom }}</span>{% endif %}</td>
+  <td class="fin">{% if utilisateur.peut("operateur") %}
+    <form method="post" action="/exports/{{ e.id }}/supprimer" onsubmit="return confirm('Supprimer {{ e.fichier }} ?')">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><button class="bouton petit danger" type="submit">Supprimer</button></form>
+  {% endif %}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% if en_cours %}<p class="aide" style="margin:10px 0 0"><span class="pastille cours"></span> Analyse en cours : la liste se met à jour automatiquement. Un gros export peut prendre quelques minutes.</p>{% endif %}
+</div>

@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% block titre %}{{ r.client.nom }} — {{ fmt_mois(r.annee, r.mois) }} v{{ r.version }}{% endblock %}
+{% block contenu %}
+<a class="retour" href="/clients/{{ r.client_id }}/{{ r.annee }}/{{ r.mois }}">{{ r.client.nom }} — {{ fmt_mois(r.annee, r.mois) }}</a>
+<div class="en-tete">
+  <div>
+    <div class="surtitre">Rapport mensuel · {{ fmt_mois(r.annee, r.mois) }}</div>
+    <h1>{{ r.client.nom }}</h1>
+    <div class="meta">
+      <span class="pastille {{ 'ok' if r.statut == 'valide' else 'cours' }}">{{ "Validé" if r.statut == "valide" else "Brouillon" }}</span>
+      <span class="etiquette">v{{ r.version }}</span>
+      <span class="pastille profil">{{ "MDR + KSC" if r.profil.mdr and r.profil.ksc else "MDR seul" if r.profil.mdr else "KSC seul" }}</span>
+      <span class="aide">Créé le <span class="mono">{{ r.cree_le | fdatetime }}</span>{% if r.cree_par %} par {{ r.cree_par.nom }}{% endif %}
+      {% if r.statut == "valide" %} · validé le <span class="mono">{{ r.valide_le | fdatetime }}</span>{% if r.valide_par %} par {{ r.valide_par.nom }}{% endif %}{% endif %}</span>
+    </div>
+  </div>
+  <div class="en-ligne">
+    {% if r.statut == "valide" %}
+      {% if utilisateur.peut("validateur") and versions[0].id == r.id %}
+      <form method="post" action="/rapports/{{ r.id }}/nouvelle-version"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="bouton secondaire" type="submit">Créer une nouvelle version</button></form>
+      {% endif %}
+      <a class="bouton" href="/rapports/{{ r.id }}/pdf">Télécharger le PDF</a>
+    {% else %}
+      {% if utilisateur.peut("operateur") %}
+      <form method="post" action="/rapports/{{ r.id }}/actualiser" onsubmit="return confirm('Recalculer les chiffres à partir des fichiers déposés ? Vos textes sont conservés.')">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><button class="bouton secondaire" type="submit">Actualiser les chiffres</button></form>
+      {% endif %}
+      {% if modifiable %}
+      <form method="post" action="/rapports/{{ r.id }}/valider"
+            onsubmit="return confirm('Valider ce rapport ? Le PDF définitif sera généré et le rapport ne pourra plus être modifié (une nouvelle version restera possible).')">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><button class="bouton valider" type="submit">Valider le rapport</button></form>
+      {% endif %}
+    {% endif %}
+  </div>
+</div>
+
+{% if d.avertissements %}
+<div class="message info"><div><strong>À noter sur les données</strong><ul>{% for a in d.avertissements %}<li>{{ a }}</li>{% endfor %}</ul></div></div>
+{% endif %}
+
+<div class="relecture">
+<div class="colonne-formulaire">
+{% if not modifiable %}
+  <div class="message info"><div>
+    {% if r.statut == "valide" %}Rapport validé : il n'est plus modifiable.{% else %}Lecture seule : la modification des textes est réservée aux validateurs.{% endif %}
+  </div></div>
+{% endif %}
+<form method="post" action="/rapports/{{ r.id }}/contenu" id="formulaire">
+<input type="hidden" name="csrf" value="{{ csrf }}">
+<fieldset {{ 'disabled' if not modifiable }}>
+
+<div class="carte">
+  <div class="titre-carte"><h2><span class="section-num">01</span>Synthèse</h2></div>
+  <div class="grille" style="grid-template-columns: minmax(150px, 190px) minmax(0, 1fr)">
+    <div class="champ"><label>Niveau de risque</label>
+      <select name="niveau_risque">{% for n in NIVEAUX %}<option {{ 'selected' if n == c.niveau_risque }}>{{ n }}</option>{% endfor %}</select>
+      {% if c.niveau_risque != d.risque.niveau %}<p class="aide" style="margin-top:6px">Calculé : {{ d.risque.niveau }}</p>{% endif %}</div>
+    <div class="champ"><label>Motifs <span class="aide">— un par ligne</span></label>
+      <textarea name="motifs_risque" rows="4">{{ c.motifs_risque | join("\n") }}</textarea></div>
+  </div>
+  <div class="champ"><label>Texte de synthèse <span class="aide">— <code>**texte**</code> = gras, ligne vide = nouveau paragraphe</span></label>
+    <textarea name="synthese" rows="7">{{ c.synthese }}</textarea></div>
+  {% if not d.avec_mdr %}
+  <div class="champ" style="margin-bottom:0"><label>Recommandation MDR <span class="aide">— laisser vide pour ne pas l'afficher</span></label>
+    <textarea name="suggestion_mdr" rows="3">{{ c.suggestion_mdr }}</textarea></div>
+  {% else %}<input type="hidden" name="suggestion_mdr" value="">{% endif %}
+</div>
+
+<div class="carte">
+  <div class="titre-carte"><h2><span class="section-num">02</span>Commentaires des sections</h2></div>
+  {% for cle, titre, present in [("mdr", "Supervision MDR", d.mdr and d.mdr.max), ("protection", "État de la protection", d.protection),
+                                  ("menaces", "Analyse des menaces", d.menaces), ("vulnerabilites", "Analyse des vulnérabilités", d.vulnerabilites)] %}
+  {% if present %}
+  <div class="champ"><label>{{ titre }}</label><textarea name="com_{{ cle }}" rows="5">{{ c.commentaires[cle] }}</textarea></div>
+  {% else %}<input type="hidden" name="com_{{ cle }}" value="{{ c.commentaires[cle] }}">{% endif %}
+  {% endfor %}
+</div>
+
+{% if c.suivi %}
+<div class="carte">
+  <div class="titre-carte"><h2><span class="section-num">03</span>Suivi des actions du mois précédent</h2></div>
+  <div class="tableau">
+  <table class="liste actions">
+  <thead><tr><th>Action</th><th style="width:150px">Avancement</th><th>Commentaire</th></tr></thead>
+  <tbody>{% for a in c.suivi %}
+  <tr><td><strong>{{ a.action }}</strong><input type="hidden" name="suivi_action" value="{{ a.action }}">
+      <input type="hidden" name="suivi_priorite" value="{{ a.priorite }}"><input type="hidden" name="suivi_responsable" value="{{ a.responsable }}">
+      <br><span class="aide">{{ a.priorite }} · {{ a.responsable }}</span></td>
+    <td><select name="suivi_statut">{% for s in STATUTS %}<option {{ 'selected' if s == a.statut }}>{{ s }}</option>{% endfor %}</select></td>
+    <td><input type="text" name="suivi_commentaire" value="{{ a.commentaire }}" placeholder="facultatif"></td></tr>
+  {% endfor %}</tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
+
+<div class="carte">
+  <div class="titre-carte"><h2><span class="section-num">{{ "04" if c.suivi else "03" }}</span>Plan d'action</h2><span class="etiquette">{{ c.actions | length }} action(s)</span></div>
+  <div class="tableau">
+  <table class="liste actions" id="actions">
+  <thead><tr><th>Action et justification</th><th style="width:130px">Priorité</th><th style="width:150px">Responsable</th><th style="width:46px"></th></tr></thead>
+  <tbody>
+  {% for a in c.actions %}{% include "_ligne_action.html" %}{% endfor %}
+  </tbody>
+  </table>
+  </div>
+  {% if modifiable %}<button type="button" class="bouton petit fantome" style="margin-top:10px" onclick="ajouterAction()">+ Ajouter une action</button>{% endif %}
+  <template id="modele-action">{% with a = {"action": "", "pourquoi": "", "priorite": "Normale", "responsable": "ESAY"} %}{% include "_ligne_action.html" %}{% endwith %}</template>
+</div>
+
+<div class="carte">
+  <div class="titre-carte"><h2><span class="section-num">{{ "05" if c.suivi else "04" }}</span>Conclusion</h2></div>
+  <textarea name="conclusion" rows="6">{{ c.conclusion }}</textarea>
+</div>
+</fieldset>
+
+{% if modifiable %}
+<div class="barre-enregistrer">
+  <button class="bouton" type="submit">Enregistrer</button>
+  <span class="aide">L'aperçu se met à jour après l'enregistrement.</span>
+</div>
+{% endif %}
+</form>
+
+{% if r.statut == "brouillon" and utilisateur.peut("validateur") %}
+<form method="post" action="/rapports/{{ r.id }}/actualiser" style="margin-top:10px"
+      onsubmit="return confirm('Régénérer tous les textes à partir des chiffres ? Vos modifications seront perdues.')">
+  <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="reinitialiser" value="1">
+  <button class="bouton petit danger" type="submit">Réinitialiser tous les textes</button>
+</form>
+{% endif %}
+
+<h2>Versions</h2>
+<div class="tableau">
+<table class="liste">
+<thead><tr><th>Version</th><th>État</th><th>Créée</th><th>Validée</th></tr></thead>
+<tbody>{% for v in versions %}{% if v.statut == "valide" or utilisateur.peut("operateur") %}
+<tr><td><a href="/rapports/{{ v.id }}"><strong>v{{ v.version }}</strong></a>{% if v.id == r.id %} <span class="aide">affichée</span>{% endif %}</td>
+<td><span class="pastille {{ 'ok' if v.statut == 'valide' else 'cours' }}">{{ "Validé" if v.statut == "valide" else "Brouillon" }}</span></td>
+<td class="date">{{ v.cree_le | fdatetime }}</td><td class="date">{{ v.valide_le | fdatetime }}</td></tr>
+{% endif %}{% endfor %}</tbody>
+</table>
+</div>
+</div>
+
+<div class="colonne-apercu">
+  <div class="apercu-cadre">
+    <div class="barre-apercu">
+      <strong>Aperçu du PDF</strong>
+      <span class="en-ligne" style="gap:6px">
+        <a href="/rapports/{{ r.id }}/apercu.pdf" target="_blank">Ouvrir dans un onglet ↗</a>
+        {% if utilisateur.peut("operateur") %}<a href="/rapports/{{ r.id }}/word"
+           title="Export modifiable, à n'utiliser qu'en dépannage : le PDF reste la référence">Word (dépannage)</a>{% endif %}
+      </span>
+    </div>
+    <iframe src="/rapports/{{ r.id }}/apercu.pdf#view=FitH" title="Aperçu du rapport"></iframe>
+  </div>
+</div>
+</div>
+
+<script>
+function ajouterAction() {
+  const ligne = document.getElementById("modele-action").content.cloneNode(true);
+  document.querySelector("#actions tbody").appendChild(ligne);
+}
+function supprimerAction(bouton) { bouton.closest("tr").remove(); }
+</script>
+{% endblock %}

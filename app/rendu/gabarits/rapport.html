@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Rapport mensuel de sécurité — {{ d.client }} — {{ mois }}</title>
+<style>
+{{ css | safe }}
+@page { @bottom-center { content: "Confidentiel — {{ presta.nom }} / {{ presta.signataire }}     ·     Page " counter(page) " / " counter(pages); } }
+</style>
+</head>
+<body>
+{% set p, m, v, mdr = d.protection, d.menaces, d.vulnerabilites, d.mdr %}
+{% set niveau = c.niveau_risque %}
+
+{% macro h1(ident) %}<h1 id="{{ ident }}">{{ numeros[ident] }} {{ titres[ident] }}</h1>{% endmacro %}
+{% macro h2(ident) %}<h2 id="{{ ident }}">{{ numeros[ident] }} {{ titres[ident] }}</h2>{% endmacro %}
+{% macro encadre(titre, classe="k-info") %}
+<div class="encadre {{ classe }}">{% if titre %}<div class="titre">{{ titre | md_ligne }}</div>{% endif %}{{ caller() }}</div>
+{% endmacro %}
+{% macro en_attente(nom) %}
+{% call encadre("Données en attente", "attente k-attente") %}
+<p>L'export Kaspersky Security Center « {{ nom }} » n'a pas encore été transmis pour cette période.</p>
+<p>Cette section sera complétée dès réception du fichier.</p>
+{% endcall %}
+{% endmacro %}
+{% macro figure(nom, legende, classe="") %}
+{% if graphiques[nom] %}<figure class="{{ classe }}">{{ graphiques[nom] | safe }}<figcaption>{{ legende }}</figcaption></figure>{% endif %}
+{% endmacro %}
+
+<div class="entete">
+  <img src="logo.png" alt="{{ presta.nom }}">
+  <div class="droite">Rapport mensuel de sécurité — {{ d.client }}<br>{{ mois }}</div>
+</div>
+
+{# ===================================================== Page de garde #}
+<section class="couverture">
+  <img class="logo" src="logo.png" alt="{{ presta.nom }}">
+  <div class="bande">
+    <div class="t1">RAPPORT MENSUEL</div>
+    <div class="t2">DE SÉCURITÉ</div>
+    <div class="t3">{{ d.client }} &nbsp;·&nbsp; {{ mois }}</div>
+  </div>
+  <table class="infos">
+    <tr><td>Client</td><td>{{ d.client }}</td></tr>
+    <tr><td>Prestataire</td><td>{{ presta.nom_complet }}</td></tr>
+    <tr><td>Période couverte</td><td>Du {{ d.debut | fdate }} au {{ d.fin_incluse | fdate }}</td></tr>
+    <tr><td>Date du rapport</td><td>{{ date_rapport | fdate }}</td></tr>
+    <tr><td>Rédacteur</td><td>{{ presta.signataire }}</td></tr>
+    <tr><td>Sources</td><td>
+      {%- if d.avec_mdr %}Kaspersky MDR{% endif %}
+      {%- if d.avec_mdr and d.exports %} · {% endif %}
+      {%- if d.exports %}Kaspersky Security Center{% elif not d.avec_mdr %}Kaspersky Security Center (exports en attente){% else %} (exports KSC en attente){% endif %}
+    </td></tr>
+  </table>
+  <div class="risque-garde k-{{ niveau | slug }}">
+    <div class="libelle">Niveau de risque global</div>
+    <div class="niveau">{{ niveau | upper }}</div>
+    {% if d.risque.partiel %}
+    <div class="note">évaluation partielle — {{ "basée sur la seule supervision MDR" if d.exports_manquants | length == 3 else "une partie des données du parc est en attente" }}</div>
+    {% endif %}
+  </div>
+  <p class="confidentiel">Document confidentiel, destiné exclusivement au client mentionné ci-dessus.</p>
+</section>
+
+{# ===================================================== Sommaire #}
+<section class="sommaire">
+  <div class="titre-sommaire">Sommaire</div>
+  <ul>
+  {% for e in sommaire %}<li class="n{{ e.niveau }}"><a href="#{{ e.id }}">{{ e.titre }}</a></li>{% endfor %}
+  </ul>
+</section>
+
+{# ===================================================== 1. Synthèse #}
+{{ h1("synthese") }}
+{{ c.synthese | md }}
+
+{% call encadre("Niveau de risque global : " ~ niveau | upper, "k-" ~ (niveau | slug)) %}
+<ul>
+{% for motif in c.motifs_risque %}<li>{{ motif | md_ligne }}</li>{% else %}<li>Aucun point bloquant relevé sur la période.</li>{% endfor %}
+</ul>
+{% if d.risque.partiel %}<p>Évaluation partielle : les exports du parc (KSC) ne sont pas tous disponibles.</p>{% endif %}
+{% endcall %}
+
+{% set tuiles = [] %}
+{% if mdr %}
+  {% do tuiles.append((mdr.max | nb, "postes max. supervisés (MDR)", "" if mdr.max else "critique")) %}
+  {% do tuiles.append((mdr.incidents | length, "incidents MDR", "critique" if mdr.incidents else "bon")) %}
+{% endif %}
+{% if p %}{% do tuiles.append((p.critique ~ "/" ~ p.total, "appareils en état critique", statut_taux(p.critique, p.total) | slug)) %}{% endif %}
+{% if m %}{% do tuiles.append((m.detections | nb, "menaces détectées" ~ ("" if m.non_neutralisees else " et bloquées"), "")) %}{% endif %}
+{% if v %}{% do tuiles.append((v.critiques, "vulnérabilités critiques", "critique" if v.critiques else "bon")) %}{% endif %}
+<div class="tuiles">
+{% for valeur, libelle, k in tuiles[:5] %}
+  <div class="tuile {{ 'k-' ~ k if k }}"><div class="valeur">{{ valeur }}</div><div class="libelle">{{ libelle }}</div></div>
+{% endfor %}
+</div>
+
+<table class="donnees">
+<thead><tr><th>Indicateur</th><th class="c">Valeur</th><th>Statut</th><th class="c">Évolution*</th></tr></thead>
+<tbody>
+{% if mdr %}
+<tr><td>Postes supervisés par le MDR (moyenne jours ouvrés)</td><td class="c">{{ (mdr.moyenne_ouvres or mdr.moyenne) | virgule }}</td>
+    <td>{{ ("Critique" if not mdr.max else "Normal") | statut }}</td><td class="c">{{ evolution("postes_mdr_moyenne") }}</td></tr>
+<tr><td>Incidents de sécurité MDR</td><td class="c">{{ mdr.incidents | length }}</td>
+    <td>{{ ("Critique" if mdr.incidents else "Aucun") | statut }}</td><td class="c">{{ evolution("incidents_mdr") }}</td></tr>
+{% endif %}
+{% if p %}
+{% set sans = p.anomalies.get("protection_desactivee", 0) + p.anomalies.get("non_installe", 0) %}
+<tr><td>Appareils administrés (KSC)</td><td class="c">{{ p.total }}</td><td>{{ "Normal" | statut }}</td><td class="c">{{ evolution("appareils_administres") }}</td></tr>
+<tr><td>Appareils en état critique</td><td class="c">{{ p.critique }} ({{ pct(p.critique, p.total) }})</td>
+    <td>{{ statut_taux(p.critique, p.total) | statut }}</td><td class="c">{{ evolution("appareils_critiques") }}</td></tr>
+<tr><td>Appareils sans protection active</td><td class="c">{{ sans }}</td><td>{{ ("Critique" if sans else "Bon") | statut }}</td><td class="c">—</td></tr>
+{% else %}
+<tr><td>État de la protection du parc</td><td class="c">—</td><td>{{ "En attente" | statut }}</td><td class="c">—</td></tr>
+{% endif %}
+{% if m %}
+<tr><td>Menaces détectées</td><td class="c">{{ m.detections | nb }} événements</td>
+    <td>{{ ("Bon" if not m.non_neutralisees else "À surveiller") | statut }}</td><td class="c">{{ evolution("detections") }}</td></tr>
+<tr><td>Appareils exposés à une menace</td><td class="c">{{ m.appareils_touches }}</td>
+    <td>{{ ("Modéré" if m.appareils_touches else "Bon") | statut }}</td><td class="c">{{ evolution("appareils_touches") }}</td></tr>
+{% else %}
+<tr><td>Menaces détectées</td><td class="c">—</td><td>{{ "En attente" | statut }}</td><td class="c">—</td></tr>
+{% endif %}
+{% if v %}
+<tr><td>Vulnérabilités (dont critiques)</td><td class="c">{{ v.total }} ({{ v.critiques }})</td>
+    <td>{{ ("Critique" if v.critiques else "Bon") | statut }}</td><td class="c">{{ evolution("vulnerabilites_critiques") }}</td></tr>
+{% else %}
+<tr><td>Vulnérabilités logicielles</td><td class="c">—</td><td>{{ "En attente" | statut }}</td><td class="c">—</td></tr>
+{% endif %}
+</tbody>
+</table>
+<p class="note">* {{ "Évolution par rapport au mois précédent." if d.precedents else "Premier rapport de la série : l'évolution sera calculée à partir du mois prochain." }}</p>
+
+{% set urgentes = c.actions | selectattr("priorite", "equalto", "Urgente") | list %}
+{% set prio = (urgentes or c.actions)[:3] %}
+{% if prio %}
+<p><strong>Priorités du mois</strong></p>
+<ul class="puces">{% for a in prio %}<li>{{ a.action }} — {{ a.responsable }}</li>{% endfor %}</ul>
+{% endif %}
+
+{% if c.suggestion_mdr %}
+{% call encadre("Recommandation : service Kaspersky MDR", "k-info") %}{{ c.suggestion_mdr | md }}{% endcall %}
+{% endif %}
+
+{# ===================================================== 2. MDR #}
+{% if d.avec_mdr %}
+{{ h1("mdr") }}
+<p>Le service Kaspersky MDR collecte en continu la télémétrie des postes équipés, la corrèle et fait analyser les
+activités suspectes par des analystes SOC 24h/24 et 7j/7. Le nombre de postes qui transmettent leur télémétrie
+reflète la couverture effective de la supervision.</p>
+{{ h2("mdr-couverture") }}
+{% if not mdr.tenant_trouve or not mdr.max %}
+  {% call encadre("Aucune télémétrie reçue", "k-critique") %}
+  <p>Aucun poste de {{ d.client }} n'a transmis de télémétrie au service MDR sur la période.</p>
+  <p>Le client n'est donc pas supervisé : les agents doivent être vérifiés en priorité.</p>
+  {% endcall %}
+{% else %}
+  {{ c.commentaires.mdr | md }}
+  {{ figure("mdr", "Nombre de postes ayant transmis de la télémétrie, par jour") }}
+  <table class="donnees">
+  <thead><tr><th>Indicateur</th><th class="c">Valeur</th></tr></thead>
+  <tbody>
+  <tr><td>Moyenne des jours ouvrés</td><td class="c">{{ mdr.moyenne_ouvres | virgule }}</td></tr>
+  <tr><td>Moyenne tous jours confondus</td><td class="c">{{ mdr.moyenne | virgule }}</td></tr>
+  <tr><td>Maximum / minimum journalier</td><td class="c">{{ mdr.max }} / {{ mdr.min }}</td></tr>
+  <tr><td>Jours couverts par les données</td><td class="c">{{ mdr.jours | length }} sur {{ (mdr.jours | length) + (mdr.jours_manquants | length) }}</td></tr>
+  {% if p %}
+  <tr><td>Appareils administrés dans KSC</td><td class="c">{{ p.total }}</td></tr>
+  <tr><td>Taux de couverture MDR (max. / parc)</td><td class="c">{{ pct(mdr.max, p.total) }}</td></tr>
+  {% endif %}
+  </tbody></table>
+  {% if p and mdr.max < 0.8 * p.total %}
+  {% call encadre("Écart de couverture", "k-eleve") %}
+  <p>{{ p.total }} appareils sont administrés dans Kaspersky Security Center, mais au plus <strong>{{ mdr.max }}</strong>
+  ont transmis de la télémétrie au MDR sur un même jour. Environ <strong>{{ p.total - mdr.max }} appareils</strong>
+  échappent donc à la détection et à la réponse managées.</p>
+  {% endcall %}
+  {% endif %}
+  {% if mdr.jours_manquants %}
+  <p class="note" style="margin-top:0">Données non encore disponibles du {{ mdr.jours_manquants[0] | fdate }} au {{ mdr.jours_manquants[-1] | fdate }} (rapport hebdomadaire suivant non encore reçu).</p>
+  {% endif %}
+
+  {{ h2("mdr-incidents") }}
+  {% if not mdr.incidents %}
+    {% call encadre("Aucun incident confirmé", "k-bon") %}
+    <p>Aucun incident de sécurité n'a été créé ou traité par les analystes MDR pour ce client sur la période.
+    Aucune activité malveillante nécessitant une intervention n'a été identifiée dans la télémétrie collectée.</p>
+    {% endcall %}
+  {% else %}
+    <table class="donnees">
+    <thead><tr><th>N°</th><th>Incident</th><th>Créé le</th><th>Priorité</th><th>Statut</th><th>Résolution</th></tr></thead>
+    <tbody>{% for i in mdr.incidents %}<tr><td>{{ i.numero }}</td><td>{{ i.nom }}</td><td>{{ i.cree }}</td><td>{{ i.priorite }}</td><td>{{ i.statut }}</td><td>{{ i.resolution }}</td></tr>{% endfor %}</tbody>
+    </table>
+  {% endif %}
+{% endif %}
+{% endif %}
+
+{# ===================================================== 3. Protection #}
+{{ h1("protection") }}
+{% if not p %}
+  {{ en_attente("Rapport sur l'état de la protection") }}
+{% else %}
+  {{ c.commentaires.protection | md }}
+  {{ figure("parc", "Répartition des appareils par état de protection", "etroit") }}
+
+  {{ h2("anomalies") }}
+  <table class="donnees">
+  <thead><tr><th>Anomalie</th><th class="c">Appareils</th><th>Impact</th></tr></thead>
+  <tbody>{% for cle, n in p.anomalies.items() %}<tr><td>{{ LIBELLES[cle] }}</td><td class="c">{{ n }}</td><td>{{ IMPACTS[cle] | statut }}</td></tr>{% endfor %}</tbody>
+  </table>
+  <p class="note">Un même appareil peut cumuler plusieurs anomalies.</p>
+
+  {% if p.anomalies.get("ksn") %}
+  {% call encadre("Point critique : serveurs KSN inaccessibles", "k-critique") %}
+  <p><strong>{{ p.anomalies.ksn }} appareils</strong> signalent « Serveurs de KSN indisponibles ». Kaspersky Security Network
+  permet la vérification en temps réel de la réputation des fichiers et des sites via le cloud. Son inaccessibilité réduit
+  fortement la détection des menaces récentes et explique l'essentiel des états critiques.</p>
+  <p>Action : autoriser l'accès aux services KSN sur le pare-feu / proxy, ou déployer un proxy KSN sur le serveur d'administration.</p>
+  {% endcall %}
+  {% endif %}
+
+  {% if p.serveurs %}
+  {{ h2("serveurs") }}
+  <p>{{ p.serveurs | length }} serveurs sont administrés, dont <strong>{{ p.serveurs_critiques | length }} en état critique</strong>.
+  Les serveurs hébergent les données et services essentiels : leur protection est prioritaire.</p>
+  <table class="donnees">
+  <thead><tr><th>Serveur</th><th>Système</th><th>État</th><th>Anomalies</th></tr></thead>
+  <tbody>{% for s in p.serveurs %}<tr><td>{{ s.appareil }}</td><td>{{ s.os | replace("Microsoft ", "") }}</td><td>{{ s.etat | statut }}</td>
+  <td>{{ s.anomalies | anomalies }}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% endif %}
+
+  {% if p.hors_ligne %}
+  {{ h2("deconnectes") }}
+  <p>{{ p.hors_ligne | length }} appareils n'ont pas communiqué avec le serveur d'administration depuis au moins 7 jours.
+  Ils ne reçoivent plus de mises à jour ni de politiques et doivent être vérifiés (poste éteint, hors réseau,
+  réinstallé ou agent défaillant).</p>
+  <table class="donnees">
+  <thead><tr><th>Appareil</th><th>Service</th><th>Dernière connexion</th><th class="c">Depuis</th></tr></thead>
+  <tbody>{% for a in p.hors_ligne[:15] %}<tr><td>{{ a.appareil }}</td><td>{{ a.groupe }}</td><td>{{ a.derniere_connexion | sans_heure }}</td><td class="c">{{ a.jours }} jours</td></tr>{% endfor %}</tbody>
+  </table>
+  {% if p.hors_ligne | length > 15 %}<p class="note">… et {{ p.hors_ligne | length - 15 }} autres (voir annexe).</p>{% endif %}
+  {% endif %}
+
+  {% if p.os_obsoletes %}
+  {{ h2("systemes") }}
+  <table class="donnees">
+  <thead><tr><th>Système</th><th class="c">Appareils</th><th>Support Microsoft</th><th>Statut</th></tr></thead>
+  <tbody>{% for o in p.os_obsoletes %}<tr><td>{{ o.os }}</td><td class="c">{{ o.appareils }}</td>
+  <td>{{ "Support terminé depuis le " if o.expire else "Fin de support le " }}{{ o.fin_support | fdate }}</td>
+  <td>{{ ("Critique" if o.expire else "Avertissement") | statut }}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% endif %}
+
+  {{ h2("services") }}
+  <table class="donnees">
+  <thead><tr><th>Service / groupe</th><th class="c">Critique</th><th class="c">Avertissement</th><th class="c">Total en anomalie</th></tr></thead>
+  <tbody>{% for g, cpt in groupes_tries(p.groupes) %}<tr><td>{{ g }}</td><td class="c">{{ cpt.get("Critique", 0) }}</td><td class="c">{{ cpt.get("Avertissement", 0) }}</td><td class="c">{{ cpt.values() | sum }}</td></tr>{% endfor %}</tbody>
+  </table>
+{% endif %}
+
+{# ===================================================== 4. Menaces #}
+{{ h1("menaces") }}
+{% if not m %}
+  {{ en_attente("Rapport sur les menaces") }}
+{% elif not m.detections %}
+  {% call encadre("Aucune menace détectée", "k-bon") %}{{ c.commentaires.menaces | md }}{% endcall %}
+{% else %}
+  {{ c.commentaires.menaces | md }}
+  <div class="tuiles">
+    <div class="tuile"><div class="valeur">{{ m.detections | nb }}</div><div class="libelle">détections</div></div>
+    <div class="tuile"><div class="valeur">{{ m.menaces_distinctes }}</div><div class="libelle">menaces distinctes</div></div>
+    <div class="tuile"><div class="valeur">{{ m.appareils_touches }}</div><div class="libelle">appareils concernés</div></div>
+    <div class="tuile k-{{ 'bon' if not m.non_neutralisees else 'a-surveiller' }}"><div class="valeur">{{ pct(m.neutralisees, m.detections) | replace(",0 ", " ") }}</div><div class="libelle">bloquées ou supprimées</div></div>
+  </div>
+
+  {{ h2("typologie") }}
+  {{ figure("categories", "Nombre de détections par catégorie de menace", "etroit") }}
+  <table class="donnees petit">
+  <thead><tr><th>Catégorie</th><th>Description</th><th class="c">Détections</th><th>Exemples</th></tr></thead>
+  <tbody>{% for cat, n in m.categories.items() %}<tr><td>{{ cat }}</td><td>{{ DESCRIPTIONS.get(cat, "") }}</td><td class="c">{{ n }}</td>
+  <td>{{ (m.domaines_phishing[:4] if cat == "Phishing" else m.exemples.get(cat, [])) | join(", ") or "—" }}</td></tr>{% endfor %}</tbody>
+  </table>
+
+  {{ h2("chronologie") }}
+  {{ figure("menaces_jour", "Nombre de détections par jour") }}
+
+  {{ h2("exposes") }}
+  <table class="donnees">
+  <thead><tr><th>Appareil</th><th class="c">Détections</th><th>Menace principale</th></tr></thead>
+  <tbody>{% for a, n, cat in m.top_appareils %}<tr><td>{{ a }}</td><td class="c">{{ n }}</td><td>{{ cat }}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% if m.top_appareils and m.top_appareils[0][1] >= 0.5 * m.detections %}
+  <p>Le poste <strong>{{ m.top_appareils[0][0] }}</strong> concentre à lui seul {{ pct(m.top_appareils[0][1], m.detections) }} des
+  détections ({{ m.top_appareils[0][2] | lower }}), ce qui indique une source récurrente (site web, extension de navigateur
+  ou programme installé) à éliminer.</p>
+  {% endif %}
+  {% if m.domaines_phishing %}
+  {% call encadre("Phishing", "k-modere") %}
+  <p>{{ m.categories.get("Phishing", 0) }} tentative(s) d'accès à des sites frauduleux ont été bloquées avant toute saisie
+  d'information, ce qui démontre l'efficacité de la protection web.</p>
+  <p>Domaines concernés : {{ m.domaines_phishing[:8] | join(", ") }}</p>
+  {% endcall %}
+  {% endif %}
+{% endif %}
+
+{# ===================================================== 5. Vulnérabilités #}
+{{ h1("vulnerabilites") }}
+{% if not v %}
+  {{ en_attente("Rapport sur les vulnérabilités") }}
+{% else %}
+  {{ c.commentaires.vulnerabilites | md }}
+  <div class="tuiles">
+    <div class="tuile"><div class="valeur">{{ v.total }}</div><div class="libelle">vulnérabilités</div></div>
+    <div class="tuile k-critique"><div class="valeur">{{ v.critiques }}</div><div class="libelle">critiques</div></div>
+    <div class="tuile k-eleve"><div class="valeur">{{ v.elevees }}</div><div class="libelle">élevées</div></div>
+    <div class="tuile"><div class="valeur">{{ v.applications | length }}</div><div class="libelle">applications concernées</div></div>
+  </div>
+  {{ figure("vulns", "Vulnérabilités par application et par gravité") }}
+  {{ h2("applications") }}
+  <table class="donnees petit">
+  <thead><tr><th>Application</th><th class="c">Vuln.</th><th class="c">Critiques</th><th class="c">Appareils*</th><th>Versions détectées</th><th>Sévérité</th></tr></thead>
+  <tbody>{% for appli, i in v.applications[:12] %}
+  <tr><td>{{ appli }}</td><td class="c">{{ i.total }}</td><td class="c">{{ i.critiques }}</td><td class="c">{{ i.appareils }}</td>
+  <td>{{ versions(i.versions) }}</td>
+  <td>{{ ("Critique" if i.critiques else "Élevé" if i.elevees else "Modéré") | statut }}</td></tr>{% endfor %}</tbody>
+  </table>
+  <p class="note">* Nombre maximal d'appareils exposés à une même vulnérabilité de l'application.</p>
+  {% if v.applications %}
+  {% set appli, i = v.applications[0] %}
+  {% call encadre("Correctif à fort impact", "k-info") %}
+  <p>La mise à jour de <strong>{{ appli }}</strong> vers sa dernière version supprimerait à elle seule
+  <strong>{{ i.total }} vulnérabilités</strong> ({{ pct(i.total, v.total) }} du total). Les versions obsolètes doivent être
+  désinstallées ou mises à jour via la gestion des correctifs de Kaspersky Security Center.</p>
+  {% endcall %}
+  {% endif %}
+{% endif %}
+
+{# ===================================================== 6. Actions #}
+{{ h1("actions") }}
+{% if c.suivi %}
+{{ h2("actions-suivi") }}
+<p>Avancement des actions recommandées le mois précédent et restées ouvertes.</p>
+<table class="donnees">
+<thead><tr><th>Action</th><th>Priorité initiale</th><th>Responsable</th><th>Avancement</th></tr></thead>
+<tbody>{% for a in c.suivi %}
+<tr><td><strong>{{ a.action }}</strong>{% if a.commentaire %}<span class="justif">{{ a.commentaire }}</span>{% endif %}</td>
+<td>{{ a.priorite | statut }}</td><td>{{ a.responsable }}</td><td>{{ a.statut | statut }}</td></tr>{% endfor %}</tbody>
+</table>
+{{ h2("actions-mois") }}
+{% endif %}
+{% if not c.actions %}
+<p>Aucune action corrective n'est requise ce mois-ci. La supervision se poursuit normalement.</p>
+{% else %}
+<p>Les actions ci-dessous découlent des constats du mois. Elles sont classées par priorité ; leur avancement sera suivi
+dans le prochain rapport.</p>
+<table class="donnees">
+<thead><tr><th class="c">#</th><th>Action et justification</th><th>Priorité</th><th>Responsable</th></tr></thead>
+<tbody>{% for a in c.actions %}
+<tr><td class="c">{{ loop.index }}</td><td><strong>{{ a.action }}</strong>{% if a.pourquoi %}<span class="justif">{{ a.pourquoi }}</span>{% endif %}</td>
+<td>{{ a.priorite | statut }}</td><td>{{ a.responsable }}</td></tr>{% endfor %}</tbody>
+</table>
+{% endif %}
+
+{# ===================================================== 7. Conclusion #}
+{{ h1("conclusion") }}
+{{ c.conclusion | md }}
+<div class="signature">
+  <div class="nom">{{ presta.signataire }}</div>
+  <div class="societe">{{ presta.nom_complet }}</div>
+</div>
+
+{# ===================================================== Annexes #}
+<div class="annexes">
+{% if p %}
+<h1 id="annexe-appareils">{{ numeros["annexe-appareils"] }} {{ titres["annexe-appareils"] }}</h1>
+<table class="donnees petit">
+<thead><tr><th>Appareil</th><th>Service</th><th>État</th><th>Anomalies</th></tr></thead>
+<tbody>{% for a in appareils_tries(p.appareils) %}<tr><td>{{ a.appareil }}</td><td>{{ a.groupe }}</td><td>{{ a.etat | statut }}</td>
+<td>{{ (a.anomalies | anomalies) or a.raison }}</td></tr>{% endfor %}</tbody>
+</table>
+{% endif %}
+
+<h1 id="annexe-sources">{{ numeros["annexe-sources"] }} {{ titres["annexe-sources"] }}</h1>
+<table class="donnees petit">
+<thead><tr><th>Source</th><th>Fichier</th><th>Période</th></tr></thead>
+<tbody>
+{% if mdr %}{% for s in mdr.semaines %}<tr><td>Kaspersky MDR (hebdomadaire)</td><td>{{ s.fichier }}</td><td class="nobr">{{ s.debut | fdate_courte }} → {{ s.fin | fdate_courte }}</td></tr>{% endfor %}{% endif %}
+{% for typ, nom in [("protection", "KSC — État de la protection"), ("menaces", "KSC — Menaces"), ("vulnerabilites", "KSC — Vulnérabilités")] %}
+{% set e = d.exports.get(typ) %}
+<tr><td>{{ nom }}</td><td>{{ e.fichier if e else "Non transmis" }}</td><td class="nobr">
+{%- if not e %}—{% elif typ == "menaces" %}{{ m.couvert_debut | fdate_courte }} → {{ m.couvert_fin | fdate_courte }}{% else %}État au {{ e.genere_le | fdate_courte }}{% endif -%}
+</td></tr>
+{% endfor %}
+</tbody></table>
+{% if d.avertissements %}<ul class="puces">{% for a in d.avertissements %}<li>{{ a }}</li>{% endfor %}</ul>{% endif %}
+
+<h1 id="annexe-glossaire">{{ numeros["annexe-glossaire"] }} {{ titres["annexe-glossaire"] }}</h1>
+<table class="donnees">
+<thead><tr><th>Terme</th><th>Définition</th></tr></thead>
+<tbody>{% for terme, definition in GLOSSAIRE %}<tr><td><strong>{{ terme }}</strong></td><td>{{ definition }}</td></tr>{% endfor %}</tbody>
+</table>
+</div>
+</body>
+</html>

@@ -1,0 +1,7 @@
+<tr>
+  <td><input type="text" name="action" value="{{ a.action }}" placeholder="Action" style="font-weight:600">
+      <textarea name="pourquoi" rows="2" placeholder="Justification" style="margin-top:6px;min-height:54px;font-size:.88rem;color:var(--encre-2)">{{ a.pourquoi }}</textarea></td>
+  <td><select name="priorite">{% for p in PRIORITES %}<option {{ 'selected' if p == a.priorite }}>{{ p }}</option>{% endfor %}</select></td>
+  <td><input type="text" name="responsable" value="{{ a.responsable }}"></td>
+  <td>{% if modifiable %}<button type="button" class="bouton petit danger" title="Retirer cette action" aria-label="Retirer cette action" onclick="supprimerAction(this)">✕</button>{% endif %}</td>
+</tr>

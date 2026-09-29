@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% from "_macros.html" import selecteur_mois %}
+{% block titre %}Tableau de bord{% endblock %}
+{% block contenu %}
+<div class="en-tete">
+  <div><div class="surtitre">Production mensuelle</div>
+  <h1>{{ fmt_mois(annee, mois) | capitalize }}</h1>
+  <p class="sous-titre">État des données reçues et des rapports de chaque client pour le mois.</p></div>
+  {{ selecteur_mois("/", annee, mois) }}
+</div>
+{% include "_tableau_liste.html" %}
+<div class="legende">
+  <span><strong>Incomplet</strong> aucune donnée</span>
+  <span><strong>Partiel</strong> des données manquent, un rapport partiel reste possible</span>
+  <span><strong>Prêt</strong> toutes les données attendues sont là</span>
+  <span><strong>Brouillon · Validé</strong> rapport créé</span>
+</div>
+{% endblock %}

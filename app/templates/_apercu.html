@@ -1,0 +1,37 @@
+{% set p, m, v, mdr = d.protection, d.menaces, d.vulnerabilites, d.mdr %}
+{% set classes = {"Critique": "critique", "Élevé": "eleve", "Modéré": "modere", "Faible": "faible"} %}
+<div class="risque {{ classes.get(d.risque.niveau, '') }}">
+  <div class="niveau">{{ d.risque.niveau }}</div>
+  <div class="intitule">Niveau de risque calculé{% if d.risque.partiel %} · évaluation partielle{% endif %}</div>
+  <div>{% if d.risque.motifs %}<ul>{% for mo in d.risque.motifs %}<li>{{ mo }}</li>{% endfor %}</ul>
+       {% else %}<span class="aide">Aucun motif particulier relevé.</span>{% endif %}
+       {% if d.risque.partiel %}<p class="aide" style="margin:6px 0 0">Exports manquants : le niveau sera réévalué à leur réception.</p>{% endif %}</div>
+</div>
+
+<div class="chiffres">
+{% if d.avec_mdr %}
+  <div class="chiffre {{ 'absent' if not (mdr and mdr.max) }}"><div class="source"><span>MDR</span><span>postes / jour</span></div>
+  {% if mdr and mdr.max %}
+    <div class="grand">{{ "%.1f" | format(mdr.moyenne_ouvres) | replace(".", ",") }}</div>
+    <div class="detail">moyenne jours ouvrés · max {{ mdr.max }}<br>{{ mdr.incidents | length }} incident(s) · {{ mdr.jours | length }} jour(s) de données</div>
+  {% else %}<div class="grand">—</div><div class="detail">Aucune télémétrie pour ce client sur le mois.</div>{% endif %}</div>
+{% endif %}
+  <div class="chiffre {{ 'absent' if not p }}"><div class="source"><span>Protection</span><span>appareils</span></div>
+  {% if p %}<div class="grand">{{ p.total }}</div>
+    <div class="detail"><strong style="color:var(--critique)">{{ p.critique }} critiques</strong> · {{ p.avertissement }} en avertissement<br>{{ p.serveurs | length }} serveurs{% if p.anomalies.ksn %} · KSN inaccessible sur {{ p.anomalies.ksn }}{% endif %}</div>
+  {% else %}<div class="grand">—</div><div class="detail">Export en attente</div>{% endif %}</div>
+  <div class="chiffre {{ 'absent' if not m }}"><div class="source"><span>Menaces</span><span>détections</span></div>
+  {% if m %}<div class="grand">{{ m.detections }}</div>
+    <div class="detail">du {{ m.couvert_debut[8:10] }}/{{ m.couvert_debut[5:7] }} au {{ m.couvert_fin[8:10] }}/{{ m.couvert_fin[5:7] }} · {{ m.menaces_distinctes }} menaces distinctes<br>
+      {{ m.appareils_touches }} appareils · {% if m.non_neutralisees %}<strong style="color:var(--critique)">{{ m.non_neutralisees | length }} sans blocage confirmé</strong>{% else %}toutes bloquées{% endif %}</div>
+  {% else %}<div class="grand">—</div><div class="detail">Export en attente</div>{% endif %}</div>
+  <div class="chiffre {{ 'absent' if not v }}"><div class="source"><span>Vulnérabilités</span><span>critiques</span></div>
+  {% if v %}<div class="grand {{ 'rouge' if v.critiques }}">{{ v.critiques }}<small class="aide" style="font-size:.9rem;letter-spacing:0"> / {{ v.total }}</small></div>
+    <div class="detail">{{ v.applications | length }} applications concernées{% if v.applications %}<br>principale : {{ v.applications[0][0] }}{% endif %}</div>
+  {% else %}<div class="grand">—</div><div class="detail">Export en attente</div>{% endif %}</div>
+</div>
+
+<p style="margin:18px 0 0"><span class="etiquette">{{ d.actions | length }}</span> action(s) proposée(s) au plan d'action.</p>
+{% if d.avertissements %}
+<div class="message info" style="margin:16px 0 0"><div><strong>À noter</strong><ul>{% for a in d.avertissements %}<li>{{ a }}</li>{% endfor %}</ul></div></div>
+{% endif %}

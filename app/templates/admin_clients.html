@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block titre %}Clients{% endblock %}
+{% block contenu %}
+<div class="en-tete">
+  <div><div class="surtitre">Administration</div><h1>Clients</h1>
+  <p class="sous-titre">Profil de service et correspondance avec les tenants des rapports MDR.</p></div>
+  <a class="bouton" href="/admin/clients/nouveau">+ Nouveau client</a>
+</div>
+<div class="tableau">
+<table class="liste">
+<thead><tr><th>Client</th><th>Profil</th><th>Tenants MDR</th><th>Proposer MDR</th><th>État</th><th></th></tr></thead>
+<tbody>
+{% for c in liste %}
+<tr class="{{ '' if c.actif else 'inactif' }}">
+  <td class="client">{{ c.nom }}</td>
+  <td><span class="pastille profil">{{ c.profil }}</span></td>
+  <td>{% for t in c.tenants_mdr %}<code>{{ t }}</code> {% else %}<span class="aide">—</span>{% endfor %}</td>
+  <td>{{ "Oui" if c.suggerer_mdr else "—" }}</td>
+  <td><span class="pastille {{ 'ok' if c.actif else 'attente' }}">{{ "Actif" if c.actif else "Archivé" }}</span></td>
+  <td class="fin"><a class="bouton petit secondaire" href="/admin/clients/{{ c.id }}">Modifier</a></td>
+</tr>
+{% else %}
+<tr><td colspan="6" class="vide">Aucun client pour le moment.</td></tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% endblock %}

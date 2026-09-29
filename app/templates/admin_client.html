@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block titre %}{{ client.nom if client and client.id else "Nouveau client" }}{% endblock %}
+{% block contenu %}
+<a class="retour" href="/admin/clients">Clients</a>
+<div class="en-tete">
+  <div><div class="surtitre">{{ "Fiche client" if client and client.id else "Création" }}</div>
+  <h1>{{ client.nom if client and client.id else "Nouveau client" }}</h1></div>
+</div>
+{% if erreur %}<div class="message erreur"><div>{{ erreur }}</div></div>{% endif %}
+<form method="post" action="/admin/clients{{ '/' ~ client.id if client and client.id }}" class="carte" style="max-width:780px">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <div class="champ"><label>Nom du client <span class="aide">— tel qu'il apparaîtra sur le rapport</span></label>
+    <input type="text" name="nom" value="{{ client.nom if client else '' }}" required></div>
+
+  <label>Services souscrits</label>
+  <label class="case"><input type="checkbox" name="avec_mdr" value="true" id="avec_mdr" {{ 'checked' if not client or client.avec_mdr }}>
+    <span><strong>Kaspersky MDR</strong><br><span class="aide">Données issues des rapports hebdomadaires MDR</span></span></label>
+  <label class="case"><input type="checkbox" name="avec_ksc" value="true" {{ 'checked' if not client or client.avec_ksc }}>
+    <span><strong>Kaspersky Security Center</strong><br><span class="aide">Le client transmet ses exports (protection, menaces, vulnérabilités)</span></span></label>
+
+  <div class="champ" id="bloc_tenants" style="margin-top:18px">
+    <label>Tenant(s) MDR <span class="aide">— nom exact dans les rapports hebdo, un par ligne. Le tenant racine s'écrit <code>root tenant</code>.</span></label>
+    <textarea name="tenants_mdr" id="tenants_mdr" rows="2" style="font-family:var(--mono);font-size:.88rem">{{ (client.tenants_mdr or []) | join("\n") if client else "" }}</textarea>
+    {% if tenants %}
+    <div class="aide" style="margin-top:10px">Tenants trouvés dans les rapports hebdo déposés — cliquer pour ajouter :</div>
+    <div class="tenants">{% for t in tenants %}<button type="button" onclick="ajouterTenant('{{ t }}')">{{ t }}</button>{% endfor %}</div>
+    {% endif %}
+  </div>
+
+  <div id="bloc_suggestion" style="margin-top:18px">
+    <label class="case"><input type="checkbox" name="suggerer_mdr" value="true" {{ 'checked' if client and client.suggerer_mdr }}>
+      <span>Proposer le service MDR dans le rapport quand la situation le justifie <span class="aide">(clients sans MDR uniquement)</span></span></label>
+  </div>
+
+  <div class="champ" style="margin-top:18px"><label>Notes internes</label><textarea name="notes" rows="2">{{ client.notes if client else '' }}</textarea></div>
+  {% if client and client.id %}
+  <label class="case"><input type="checkbox" name="actif" value="true" {{ 'checked' if client.actif }}>
+    <span><strong>Client actif</strong><br><span class="aide">Décocher pour l'archiver : il n'apparaît plus au tableau de bord, son historique est conservé.</span></span></label>
+  {% else %}<input type="hidden" name="actif" value="true">{% endif %}
+  <div class="actions-bas" style="margin-top:20px"><button class="bouton" type="submit">Enregistrer</button><a class="bouton secondaire" href="/admin/clients">Annuler</a></div>
+</form>
+<script>
+function ajouterTenant(t) {
+  const zone = document.getElementById("tenants_mdr");
+  const lignes = zone.value.split("\n").map(s => s.trim()).filter(Boolean);
+  if (!lignes.includes(t)) { lignes.push(t); zone.value = lignes.join("\n"); }
+}
+function majProfil() {
+  const mdr = document.getElementById("avec_mdr").checked;
+  document.getElementById("bloc_tenants").hidden = !mdr;
+  document.getElementById("bloc_suggestion").hidden = mdr;
+}
+document.getElementById("avec_mdr").addEventListener("change", majProfil);
+majProfil();
+</script>
+{% endblock %}

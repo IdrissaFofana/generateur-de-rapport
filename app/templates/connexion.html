@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block titre %}Connexion{% endblock %}
+{% block corps %}
+<div class="connexion">
+  <section class="scene">
+    <img class="ruche" src="/static/ruche.svg" alt="">
+    <div class="code">ESAY · Centre de services sécurité</div>
+    <div>
+      <h1>Rapports mensuels de <em>sécurité</em>.</h1>
+      <p>Supervision MDR et exports Kaspersky Security Center, consolidés, relus et validés pour chaque client.</p>
+    </div>
+    <div class="sources"><span>Kaspersky MDR</span><span>Security Center</span><span>PDF validé</span></div>
+  </section>
+  <section class="formulaire">
+    <img src="/static/logo-transparent.png" alt="ESAY Corporation">
+    <h2>Connexion</h2>
+    <p class="aide" style="font-size:.95rem">Accès réservé aux équipes ESAY.</p>
+    <form method="post" action="/connexion">
+      {% if erreur %}<div class="message erreur"><div>{{ erreur }}</div></div>{% endif %}
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="champ"><label for="email">Adresse e-mail</label>
+        <input type="email" id="email" name="email" value="{{ email or '' }}" required autofocus autocomplete="username"></div>
+      <div class="champ"><label for="mdp">Mot de passe</label>
+        <input type="password" id="mdp" name="mot_de_passe" required autocomplete="current-password"></div>
+      <button class="bouton fleche" type="submit">Se connecter</button>
+    </form>
+    <div class="note">Diffusion restreinte · Confidentiel</div>
+  </section>
+</div>
+{% endblock %}
