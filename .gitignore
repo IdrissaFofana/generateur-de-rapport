@@ -4,3 +4,4 @@ app/moteur/.cache/
 __pycache__/
 *.pyc
 .venv/
+export_serveur/
