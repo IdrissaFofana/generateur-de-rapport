@@ -19,7 +19,7 @@
   <span class="intitule">Actions groupées</span>
   {% if utilisateur.peut("operateur") %}
   <form method="post" action="/tableau/brouillons" class="en-ligne"
-        onsubmit="return confirm('Créer les brouillons de tous les clients éligibles pour {{ fmt_mois(annee, mois) }} ?')">
+        data-confirmer="Créer les brouillons de tous les clients éligibles pour {{ fmt_mois(annee, mois) }} ?">
     <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="annee" value="{{ annee }}"><input type="hidden" name="mois" value="{{ mois }}">
     <button class="bouton petit" type="submit" {{ 'disabled' if not (prets or partiels) }}>Créer les brouillons prêts <span class="compteur">{{ prets }}</span></button>
     {% if partiels %}<label class="case simple aide"><input type="checkbox" name="partiels" value="true"> inclure les {{ partiels }} partiel(s)</label>{% endif %}

@@ -7,10 +7,16 @@
   <h1>{{ client.nom if client and client.id else "Nouveau client" }}</h1></div>
 </div>
 {% if erreur %}<div class="message erreur"><div>{{ erreur }}</div></div>{% endif %}
+{% if depuis_import %}<div class="message info"><div>Nom repris d'un rapport importé. Complétez la fiche : à l'enregistrement, les rapports
+en attente qui citent ce client lui sont rattachés automatiquement.</div></div>{% endif %}
 <form method="post" action="/admin/clients{{ '/' ~ client.id if client and client.id }}" class="carte" style="max-width:780px">
   <input type="hidden" name="csrf" value="{{ csrf }}">
   <div class="champ"><label>Nom du client <span class="aide">— tel qu'il apparaîtra sur le rapport</span></label>
     <input type="text" name="nom" value="{{ client.nom if client else '' }}" required></div>
+  <div class="champ"><label for="autres_noms">Autres noms <span class="aide">— sigle, nom complet, ancien nom… séparés par des virgules.
+    Servent à reconnaître le client dans les rapports importés (majuscules, accents et tirets sont déjà ignorés).</span></label>
+    <input type="text" id="autres_noms" name="autres_noms" value="{{ (client.autres_noms or []) | join(', ') if client else '' }}"
+           placeholder="ex. BSIC, Banque Sahélo-Saharienne pour l'Investissement et le Commerce"></div>
 
   <label>Services souscrits</label>
   <label class="case"><input type="checkbox" name="avec_mdr" value="true" id="avec_mdr" {{ 'checked' if not client or client.avec_mdr }}>
@@ -77,7 +83,7 @@
       <span class="en-ligne">
         <button class="bouton petit" type="submit">Enregistrer</button>
         <button class="bouton petit danger" type="submit" formaction="/admin/contrats/{{ k.id }}/supprimer"
-                onclick="return confirm('Supprimer ce contrat ?')">Supprimer</button>
+                data-confirmer="Supprimer ce contrat ?">Supprimer</button>
       </span>
     </div>
   </form>

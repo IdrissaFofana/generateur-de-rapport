@@ -31,6 +31,48 @@ def test_import_texte_minimal():
     assert r["objet"] == "Mise à jour de la console." and r["resultat"] == ["Mise à jour KSC", "Nettoyage"]
 
 
+@pytest.mark.parametrize("nom, texte, attendu", [
+    ("HUDSON", "chez Hudson ce jour", True), ("HUDSON", "CHEZ HUDSON", True), ("Société Générale", "SOCIETE GENERALE", True),
+    ("PAC CI", "rapport PAC-CI", True), ("PAC CI", "rapport PACCI", True), ("PAC CI", "Pac.CI", True),
+    ("HUDSON", "hudsonville", False), ("CI", "ci", None),
+])
+def test_reconnaissance_du_nom(nom, texte, attendu):
+    from app.moteur.import_intervention import _plat, motif_nom
+    motif = motif_nom(nom)
+    assert (motif is None) if attendu is None else bool(motif.search(_plat(texte))) is attendu
+
+
+def test_client_reconnu_par_un_autre_nom_et_nom_ecrit():
+    texte = "Rapport de migration\nClient : BSIC\nDate : 17/07/2026"
+    assert analyser(texte, [(9, "Banque Sahélo", "BSA", [], ["BSIC"])])["client_id"] == 9
+    r = analyser(texte, [(1, "HUDSON", "HUD", [])])
+    assert r["client_id"] is None and r["client_nom"] == "BSIC"
+    assert analyser("Nom du Client : ......................", [])["client_nom"] is None  # modèle vierge
+
+
+BSIC_DOCX = os.path.join(os.path.dirname(__file__), "..", "..", "Rapport_Intervention_Migration_KSC_Web_BSIC.docx")
+BSIC_PDF = os.path.join(os.path.dirname(__file__), "..", "..", "RI-Migration_KSC_Web-BSIC.pdf")
+
+
+@pytest.mark.skipif(not all(map(os.path.exists, (RI, BSIC_DOCX, BSIC_PDF))), reason="rapports réels absents")
+def test_similarite_doublons_sur_documents_reels():
+    from app.interventions import similarite
+    textes = {"docx": extraire_texte(open(BSIC_DOCX, "rb").read(), ".docx"), "pdf": extraire_texte(open(BSIC_PDF, "rb").read(), ".pdf"),
+              "ri": extraire_texte(open(RI, "rb").read(), ".pdf")}
+    c = {k: analyser(t, [(1, "BSIC", "BSI", [])]) for k, t in textes.items()}
+    s = lambda a, b: similarite(c[a]["objet"], c[a]["resultat"], textes[a], c[b]["objet"], c[b]["resultat"], textes[b])
+    assert s("docx", "pdf") >= 0.85   # même rapport, Word et PDF : doublon
+    assert s("docx", "ri") < 0.3      # deux rapports différents
+
+
+def test_similarite_saisie_et_assistances():
+    from app.interventions import SEUIL_DOUBLON_TEXTE, similarite
+    assert similarite("Déploiement KES", ["Installation agent"], None, "Déploiement KES", ["Installation agent"], "texte") == 1.0
+    # deux assistances mensuelles de mois différents : semblables, mais sous le seuil appliqué aux dates éloignées
+    assert similarite("Assistance mensuelle de septembre 2026.", ["Vérification des tâches"], None,
+                      "Assistance mensuelle d'octobre 2026.", ["Vérification des tâches"], None) < SEUIL_DOUBLON_TEXTE
+
+
 def test_import_signale_les_champs_manquants():
     assert set(analyser("Un texte sans repère.", [])["manquants"]) >= {"client", "date", "objet"}
 

@@ -15,8 +15,8 @@ from sqlalchemy import delete, func, select
 from app import alertes
 from app.db import Session
 from app.main import app
-from app.modeles import (ActiviteInterne, Alerte, AssistancePlanifiee, Certification, Client, Intervention, RapportService,
-                         Utilisateur)
+from app.modeles import (ActiviteInterne, Alerte, AssistancePlanifiee, Certification, Client, ImportEnAttente, Intervention,
+                         RapportService, Utilisateur)
 from app.securite import hacher
 from app.stockage import supprimer
 
@@ -155,14 +155,64 @@ def main():
         op.post(f"/interventions/{imp_id}/confirmer-import", data={"csrf": jeton(page)})
         pdf = op.get(f"/interventions/{imp_id}/pdf")
         verifier(pdf.content == ri, "import confirmé : le PDF d'origine fait foi")
+        # Même rapport, fichier différent (réexport) : doublon probable → annuler, puis importer quand même
+        copie = ri + b"\n% reexport\n"
+        r = op.post("/interventions/importer", data={"csrf": jeton(page)}, files=[("fichiers", ("R-I HUDSON (copie).pdf", copie, "application/pdf"))],
+                    follow_redirects=True)
+        verifier("ressemblent à une intervention déjà enregistrée" in r.text and "Doublons probables" in r.text,
+                 "réexport du même rapport : signalé comme doublon probable, rien n'est créé")
+        with Session() as db:
+            d = db.scalar(select(ImportEnAttente).where(ImportEnAttente.motif == "doublon"))
+            verifier(d.doublon_id == imp_id and d.similarite >= 0.85, f"doublon rattaché au bon rapport (similarité {d.similarite:.0%})")
+            did = d.id
+        r = op.post(f"/interventions/attente/{did}/supprimer", data={"csrf": jeton(r.text)}, follow_redirects=True)
+        with Session() as db:
+            verifier("annulé" in r.text and db.get(ImportEnAttente, did) is None, "« Annuler l'import » : document retiré")
+        r = op.post("/interventions/importer", data={"csrf": jeton(r.text)}, files=[("fichiers", ("R-I HUDSON (copie).pdf", copie, "application/pdf"))],
+                    follow_redirects=True)
+        with Session() as db:
+            did = db.scalar(select(ImportEnAttente.id).where(ImportEnAttente.motif == "doublon"))
+        r = op.post(f"/interventions/attente/{did}/accepter", data={"csrf": jeton(r.text)}, follow_redirects=True)
+        with Session() as db:
+            verifier("importé quand même" in r.text and db.scalar(select(func.count()).select_from(Intervention)
+                                                                   .where(Intervention.nom_fichier_source == "R-I HUDSON (copie).pdf")) == 1,
+                     "« Importer quand même » : intervention créée malgré la ressemblance")
         with open(os.path.join(DOSSIER, "Rapport_Intervention_Migration_KSC_Web_BSIC.docx"), "rb") as f:
             docx = f.read()
-        r = op.post("/interventions/importer", data={"csrf": jeton(page)},
-                    files=[("fichiers", ("bsic.docx", docx, "application/octet-stream"))], follow_redirects=True)
-        verifier("client non reconnu" in r.text, "Word d'un client inconnu : refusé sans client par défaut")
-        r = op.post("/interventions/importer", data={"csrf": jeton(page), "client_defaut": str(pac.id)},
-                    files=[("fichiers", ("bsic.docx", docx, "application/octet-stream"))], follow_redirects=True)
-        verifier("RI-2026-PAC" in r.text, "Word importé avec le client par défaut")
+        with open(os.path.join(DOSSIER, "RI-Migration_KSC_Web-BSIC.pdf"), "rb") as f:
+            bsic_pdf = f.read()
+        # Lot de deux rapports d'un client non enregistré, avec un client choisi : il est ignoré, rien n'est mal rattaché
+        r = op.post("/interventions/importer", data={"csrf": jeton(page), "client_impose": str(pac.id)},
+                    files=[("fichiers", ("bsic.docx", docx, "application/octet-stream")),
+                           ("fichiers", ("bsic.pdf", bsic_pdf, "application/pdf"))], follow_redirects=True)
+        verifier("le client choisi a été ignoré" in r.text and "2 rapport(s) d&#39;un client non enregistré" in r.text.replace("'", "&#39;"),
+                 "lot : client choisi ignoré, les 2 rapports d'un client inconnu mis en attente")
+        verifier("En attente de client" in r.text and "<strong>BSIC</strong>" in r.text, "attente : nom écrit dans le document détecté (BSIC)")
+        with Session() as db:
+            attentes = {a.nom_fichier: a.id for a in db.scalars(select(ImportEnAttente))}
+            verifier(not db.scalar(select(Intervention.id).where(Intervention.nom_fichier_source.in_(("bsic.docx", "bsic.pdf")))),
+                     "aucune intervention créée pour un client inconnu")
+        r = op.post("/interventions/importer", data={"csrf": jeton(r.text)}, files=[("fichiers", ("encore.pdf", bsic_pdf, "application/pdf"))],
+                    follow_redirects=True)
+        verifier("déjà en attente" in r.text, "doublon d'un document en attente refusé")
+        r = op.post(f"/interventions/attente/{attentes['bsic.pdf']}/rattacher", data={"csrf": jeton(r.text), "client_id": str(pac.id)},
+                    follow_redirects=True)
+        verifier("rattaché à PAC CI" in r.text and "RI-2026-PAC" in r.text, "rattachement manuel à un client existant")
+        # Création du client par un administrateur, avec « BSIC » en autre nom : le Word en attente est rattaché tout seul
+        page_adm = adm.get("/admin/clients/nouveau?nom=BSIC").text
+        verifier('value="BSIC"' in page_adm and "Nom repris d&#39;un rapport importé" in page_adm.replace("'", "&#39;"),
+                 "création du client pré-remplie depuis l'import")
+        r = adm.post("/admin/clients", data={"csrf": jeton(page_adm), "nom": "Banque Essai Import", "autres_noms": "BSIC, Banque Sahélo",
+                                             "avec_ksc": "true", "tenants_mdr": "", "notes": "", "code": "", "emails_rapports": ""},
+                     follow_redirects=True)
+        verifier("1 rapport(s) importé(s) en attente lui ont été rattachés" in r.text, "client créé : rapport en attente rattaché automatiquement")
+        with Session() as db:
+            banque = db.scalar(select(Client).where(Client.nom == "Banque Essai Import"))
+            banque_id = banque.id
+            verifier(banque.autres_noms == ["BSIC", "Banque Sahélo"] and not db.scalar(select(ImportEnAttente.id)),
+                     "autres noms enregistrés, plus rien en attente")
+            w = db.scalar(select(Intervention).where(Intervention.nom_fichier_source == "bsic.docx"))
+            verifier(w.client_id == banque_id, "le Word est rattaché au nouveau client (reconnu par son autre nom)")
         with Session() as db:
             w = db.scalar(select(Intervention).where(Intervention.nom_fichier_source == "bsic.docx"))
             verifier(w.type == "migration" and "reconstruire" in w.objet, "Word : type migration et objet extraits")
@@ -226,6 +276,10 @@ def main():
             for cid_, (actif, depuis) in etat_initial.items():
                 c = db.get(Client, cid_)
                 c.assistance_mensuelle, c.assistance_depuis = actif, depuis
+            for a in db.scalars(select(ImportEnAttente).where(ImportEnAttente.cree_par_id.in_(ids))):
+                supprimer(a.fichier)
+                db.delete(a)
+            db.execute(delete(Client).where(Client.nom == "Banque Essai Import"))
             db.execute(delete(Utilisateur).where(Utilisateur.id.in_(ids)))
             db.commit()
         print("Données d'essai supprimées.")

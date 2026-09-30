@@ -28,7 +28,7 @@
 {% if utilisateur.peut("operateur") %}
 <div class="actions-groupees" style="margin-top:0">
   <span class="intitule">Actions groupées</span>
-  <form method="post" action="/bilans/creer-tous" onsubmit="return confirm('Créer les bilans {{ libelle }} de tous les clients complets ?')">
+  <form method="post" action="/bilans/creer-tous" data-confirmer="Créer les bilans {{ libelle }} de tous les clients complets ?">
     <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="periodicite" value="{{ periodicite }}">
     <input type="hidden" name="annee" value="{{ annee }}"><input type="hidden" name="numero" value="{{ numero }}">
     <button class="bouton petit" type="submit" {{ 'disabled' if not complets }}>Créer les bilans complets <span class="compteur">{{ complets | length }}</span></button>
@@ -55,7 +55,7 @@
   <td class="fin">
     {% if r %}<a class="bouton petit secondaire fleche" href="/rapports/{{ r.id }}">Ouvrir</a>
     {% elif utilisateur.peut("operateur") and l.valides %}
-    <form method="post" action="/bilans/creer"{% if not l.complet %} onsubmit="return confirm('Des mois ne sont pas validés : ils seront exclus du bilan. Continuer ?')"{% endif %}>
+    <form method="post" action="/bilans/creer"{% if not l.complet %} data-confirmer="Des mois ne sont pas validés : ils seront exclus du bilan. Continuer ?"{% endif %}>
       <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="client_id" value="{{ c.id }}">
       <input type="hidden" name="periodicite" value="{{ periodicite }}"><input type="hidden" name="annee" value="{{ annee }}"><input type="hidden" name="numero" value="{{ numero }}">
       <button class="bouton petit {{ '' if l.complet else 'secondaire' }} fleche" type="submit">Créer le bilan</button></form>

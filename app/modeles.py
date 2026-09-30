@@ -70,6 +70,8 @@ class Client(Base):
     # Code court des numéros de rapport d'intervention (RI-2026-HUD-004) et destinataires des rapports
     code: Mapped[str | None] = mapped_column(String(10))
     emails_rapports: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
+    # Autres écritures du nom (sigle, nom complet, ancien nom) : reconnaissance des documents importés
+    autres_noms: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
     # Assistance mensuelle : au moins une assistance par mois, planifiée automatiquement
     assistance_mensuelle: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     assistance_depuis: Mapped[date | None] = mapped_column(Date)
@@ -312,6 +314,28 @@ class ElementBibliotheque(Base):
 # --------------------------------------------------------------------------- #
 # Service technique : assistances mensuelles, techniciens, activités internes, rapports du service
 # --------------------------------------------------------------------------- #
+class ImportEnAttente(Base):
+    """Ancien rapport dont le client n'a pas été reconnu : conservé jusqu'à ce qu'on crée le client ou qu'on le
+    rattache à un client existant (aucun rattachement automatique à un client par défaut dans un lot)."""
+    __tablename__ = "imports_en_attente"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    fichier: Mapped[str] = mapped_column(String(500))
+    nom_fichier: Mapped[str] = mapped_column(String(300))
+    extension: Mapped[str] = mapped_column(String(10))
+    empreinte: Mapped[str] = mapped_column(String(64), unique=True)
+    texte: Mapped[str] = mapped_column(Text, default="")
+    nom_detecte: Mapped[str | None] = mapped_column(String(200))
+    # Motif de l'attente : « client » (client non reconnu) ou « doublon » (ressemble à une intervention existante)
+    motif: Mapped[str] = mapped_column(String(20), default="client", server_default="client")
+    client_id: Mapped[int | None] = mapped_column(ForeignKey("clients.id", ondelete="CASCADE"))
+    doublon_id: Mapped[int | None] = mapped_column(ForeignKey("interventions.id", ondelete="SET NULL"))
+    similarite: Mapped[float | None] = mapped_column(Float)
+    cree_par_id: Mapped[int | None] = mapped_column(ForeignKey("utilisateurs.id", ondelete="SET NULL"))
+    cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    client = relationship("Client")
+    doublon = relationship("Intervention")
+
+
 STATUTS_ASSISTANCE = {"a_planifier": "À planifier", "planifiee": "Planifiée", "realisee": "Réalisée", "reportee": "Reportée"}
 
 

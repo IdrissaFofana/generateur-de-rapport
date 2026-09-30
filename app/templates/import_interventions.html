@@ -20,12 +20,64 @@
       <span class="aide">Plusieurs fichiers à la fois. Un fichier déjà importé est ignoré.</span><span class="choisis"></span></span>
   </label>
   <div class="en-ligne" style="margin-top:14px;align-items:end">
-    <div><label for="cd">Client par défaut <span class="aide">— si le document ne permet pas de le reconnaître</span></label>
-      <select id="cd" name="client_defaut" style="width:auto"><option value="">Reconnaître automatiquement</option>
+    <div><label for="cd">Client <span class="aide">— reconnu automatiquement ; choix manuel pris en compte pour un fichier seul</span></label>
+      <select id="cd" name="client_impose" style="width:auto"><option value="">Reconnaître automatiquement</option>
         {% for c in clients %}<option value="{{ c.id }}">{{ c.nom }}</option>{% endfor %}</select></div>
     <button class="bouton" type="submit">Importer</button>
   </div>
+  <p class="aide" style="margin:10px 0 0">Un rapport dont le client n'est pas encore enregistré n'est pas perdu : il est mis en attente ci-dessous,
+  jusqu'à ce que vous créiez le client ou le rattachiez à un client existant.</p>
 </form>
+
+{% if doublons %}
+<div class="carte bandeau-import">
+  <div class="titre-carte"><h2>Doublons probables</h2><span class="aide">{{ doublons | length }} rapport(s) semblable(s) à une intervention déjà enregistrée</span></div>
+  <p class="aide" style="margin-top:-4px">Même client, dates proches et contenu très semblable. S'il s'agit bien d'une autre intervention
+  (ex. deux passages la même semaine), importez-le quand même ; sinon annulez l'import (le fichier est supprimé).</p>
+  <div class="tableau"><table class="liste">
+    <thead><tr><th>Document importé</th><th>Client</th><th>Ressemble à</th><th>Similarité</th><th></th></tr></thead>
+    <tbody>{% for a in doublons %}<tr>
+      <td><a class="fichier {{ a.extension[1:] }}" href="/interventions/attente/{{ a.id }}/original">{{ a.nom_fichier }}</a><div class="aide">déposé le {{ a.cree_le | fdatetime }}</div></td>
+      <td class="client">{{ a.client.nom }}</td>
+      <td>{% if a.doublon %}<a class="mono nobr" href="/interventions/{{ a.doublon_id }}" target="_blank">{{ a.doublon.numero }}</a>
+        <div class="aide">{{ a.doublon.libelle_type }} du {{ a.doublon.date_debut | fdate }}{% if a.doublon.nom_fichier_source %} · {{ a.doublon.nom_fichier_source }}{% endif %}</div>
+        {% else %}<span class="aide">intervention supprimée depuis</span>{% endif %}</td>
+      <td><div class="barre-valeur faible"><i style="width:{{ ((a.similarite or 0) * 100) | round | int }}%"></i><span>{{ ((a.similarite or 0) * 100) | round | int }} %</span></div></td>
+      <td class="fin"><span class="en-ligne" style="justify-content:flex-end">
+        <form method="post" action="/interventions/attente/{{ a.id }}/accepter"><input type="hidden" name="csrf" value="{{ csrf }}">
+          <button class="bouton petit" type="submit">Importer quand même</button></form>
+        <form method="post" action="/interventions/attente/{{ a.id }}/supprimer" data-confirmer="Annuler l'import de ce document ? Le fichier sera supprimé." data-confirmer-libelle="Oui, annuler l'import">
+          <input type="hidden" name="csrf" value="{{ csrf }}"><button class="bouton petit danger" type="submit">Annuler l'import</button></form></span></td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+{% endif %}
+
+{% if attentes %}
+<div class="carte bandeau-import">
+  <div class="titre-carte"><h2>En attente de client</h2><span class="aide">{{ attentes | length }} rapport(s) d'un client non reconnu</span></div>
+  <div class="tableau"><table class="liste">
+    <thead><tr><th>Fichier d'origine</th><th>Client écrit dans le document</th><th>Rattacher à un client existant</th><th></th></tr></thead>
+    <tbody>{% for a in attentes %}<tr>
+      <td><a class="fichier {{ a.extension[1:] }}" href="/interventions/attente/{{ a.id }}/original">{{ a.nom_fichier }}</a><div class="aide">déposé le {{ a.cree_le | fdatetime }}</div></td>
+      <td>{% if a.nom_detecte %}<strong>{{ a.nom_detecte }}</strong>{% else %}<span class="aide">non trouvé</span>{% endif %}</td>
+      <td><form method="post" action="/interventions/attente/{{ a.id }}/rattacher" class="en-ligne">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <select name="client_id" required style="width:auto"><option value="">Client…</option>
+          {% for c in clients %}<option value="{{ c.id }}">{{ c.nom }}</option>{% endfor %}</select>
+        {% if a.nom_detecte %}<label class="case simple aide" title="Ajoute « {{ a.nom_detecte }} » aux autres noms du client : ses prochains rapports seront reconnus seuls">
+          <input type="checkbox" name="memoriser" value="true" checked><span>retenir « {{ a.nom_detecte }} »</span></label>{% endif %}
+        <button class="bouton petit" type="submit">Rattacher</button></form></td>
+      <td class="fin"><span class="en-ligne" style="justify-content:flex-end">
+        {% if utilisateur.peut("admin") %}<a class="bouton petit secondaire" href="/admin/clients/nouveau{{ '?nom=' ~ (a.nom_detecte | urlencode) if a.nom_detecte }}">Créer le client</a>{% endif %}
+        <form method="post" action="/interventions/attente/{{ a.id }}/supprimer" data-confirmer="Retirer ce document ?">
+          <input type="hidden" name="csrf" value="{{ csrf }}"><button class="bouton petit danger" type="submit">Retirer</button></form></span></td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  {% if not utilisateur.peut("admin") %}<p class="aide" style="margin:10px 0 0">Nouveau client : demandez à un administrateur de le créer ;
+  les rapports en attente qui le citent lui seront rattachés automatiquement.</p>{% endif %}
+</div>
+{% endif %}
 
 <div class="carte">
   <div class="titre-carte"><h2>À vérifier</h2><span class="aide">{{ a_verifier | length }} rapport(s)</span></div>

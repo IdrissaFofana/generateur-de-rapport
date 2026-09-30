@@ -12,7 +12,7 @@ from .. import alertes
 from .. import interventions as mi
 from ..db import session_db
 from ..modeles import (BROUILLON, MODES_INTERVENTION, STATUTS_INTERVENTION, TYPES_INTERVENTION, VALIDE, Client,
-                       ElementBibliotheque, Intervention, Utilisateur, journaliser)
+                       ElementBibliotheque, ImportEnAttente, Intervention, Utilisateur, journaliser)
 from ..securite import exiger, verifier_csrf
 from ..stockage import DepotInvalide, absolu, lire_fichier, type_mime
 from ..stockage import supprimer as supprimer_fichier
@@ -96,22 +96,37 @@ def creer(request: Request, client_id: int = Form(...), type: str = Form(...), d
 def importer_form(request: Request, u=Depends(operateur), db: SessionDB = Depends(session_db)):
     a_verifier = db.scalars(select(Intervention).where(Intervention.a_verifier.is_(True)).order_by(Intervention.cree_le.desc())).all()
     importes = db.scalar(select(func.count()).select_from(Intervention).where(Intervention.source == "import", Intervention.a_verifier.is_(False)))
+    attentes = db.scalars(select(ImportEnAttente).order_by(ImportEnAttente.cree_le.desc())).all()
     return page(request, "import_interventions.html", u, a_verifier=a_verifier, importes=importes,
+                attentes=[a for a in attentes if a.motif == "client"], doublons=[a for a in attentes if a.motif == "doublon"],
                 clients=db.scalars(select(Client).where(Client.actif.is_(True)).order_by(Client.nom)).all())
 
 
 @routes.post("/interventions/importer", dependencies=[Depends(verifier_csrf)])
-async def importer(request: Request, fichiers: list[UploadFile] = File(...), client_defaut: str = Form(""),
+async def importer(request: Request, fichiers: list[UploadFile] = File(...), client_impose: str = Form(""),
                    u=Depends(operateur), db: SessionDB = Depends(session_db)):
-    reussis, erreurs = [], []
+    """Le client choisi à la main n'est appliqué qu'à un fichier seul : dans un lot, un document non reconnu est mis
+    en attente plutôt que rattaché d'office à un client qui n'est peut-être pas le sien."""
+    impose = int(client_impose) if client_impose.isdigit() and len(fichiers) == 1 else None
+    if client_impose.isdigit() and len(fichiers) > 1:
+        flash(request, "Plusieurs fichiers : le client choisi a été ignoré, chaque document est reconnu séparément.", "info")
+    reussis, attente, doublons, erreurs = [], [], [], []
     for f in fichiers:
         try:
             contenu, extension = await lire_fichier(f, (".pdf", ".docx"))
-            i, manquants = mi.importer(db, contenu, extension, f.filename or "rapport", u,
-                                       int(client_defaut) if client_defaut.isdigit() else None)
+            i, detail = mi.importer(db, contenu, extension, f.filename or "rapport", u, impose)
             db.flush()
+            if i is None and detail.motif == "doublon":
+                journaliser(db, u, "import en attente : doublon probable",
+                            f"« {f.filename} » ressemble à {detail.doublon.numero} ({round(detail.similarite * 100)} %)")
+                doublons.append(f"{f.filename} ≈ {detail.doublon.numero}")
+                continue
+            if i is None:
+                journaliser(db, u, "import en attente de client", f"« {f.filename} »" + (f" (client écrit : {detail.nom_detecte})" if detail.nom_detecte else ""))
+                attente.append(f.filename + (f" — client « {detail.nom_detecte} »" if detail.nom_detecte else ""))
+                continue
             journaliser(db, u, "import intervention", f"{i.numero} depuis « {f.filename} »")
-            reussis.append(f"{i.numero}" + (f" (à compléter : {', '.join(manquants)})" if manquants else ""))
+            reussis.append(f"{i.numero}" + (f" (à compléter : {', '.join(detail)})" if detail else ""))
         except (DepotInvalide, ValueError) as e:
             erreurs.append(f"{f.filename} : {e}")
         except Exception as e:  # noqa: BLE001  (document illisible)
@@ -119,9 +134,80 @@ async def importer(request: Request, fichiers: list[UploadFile] = File(...), cli
     db.commit()
     if reussis:
         flash(request, f"{len(reussis)} rapport(s) importé(s), à vérifier : {'; '.join(reussis)}.")
+    if attente:
+        flash(request, f"{len(attente)} rapport(s) d'un client non enregistré, en attente : {'; '.join(attente)}. "
+                       "Créez le client ou rattachez-les ci-dessous.", "info")
+    if doublons:
+        flash(request, f"{len(doublons)} rapport(s) ressemblent à une intervention déjà enregistrée : {'; '.join(doublons)}. "
+                       "Importez-les quand même ou annulez ci-dessous.", "info")
     if erreurs:
         flash(request, "Non importé(s) : " + " · ".join(erreurs), "erreur")
     return rediriger("/interventions/importer")
+
+
+def _attente(db, aid):
+    a = db.get(ImportEnAttente, aid)
+    if a is None:
+        raise HTTPException(404)
+    return a
+
+
+@routes.post("/interventions/attente/{aid}/rattacher", dependencies=[Depends(verifier_csrf)])
+def rattacher_attente(request: Request, aid: int, client_id: int = Form(...), memoriser: bool = Form(False),
+                      u=Depends(operateur), db: SessionDB = Depends(session_db)):
+    a, client = _attente(db, aid), db.get(Client, client_id)
+    if client is None:
+        raise HTTPException(400, "Client inconnu.")
+    nom_detecte, nom_fichier = a.nom_detecte, a.nom_fichier
+    if memoriser and nom_detecte and nom_detecte.lower() != client.nom.lower() \
+            and nom_detecte.lower() not in [n.lower() for n in client.autres_noms or []]:
+        client.autres_noms = [*(client.autres_noms or []), nom_detecte]  # reconnu automatiquement la prochaine fois
+        journaliser(db, u, "autre nom client", f"{client.nom} : « {nom_detecte} »")
+    i, _ = mi.resoudre_attente(db, a, client, u)
+    if i is None:
+        journaliser(db, u, "import en attente : doublon probable", f"« {nom_fichier} » ressemble à {a.doublon.numero} ({client.nom})")
+        db.commit()
+        flash(request, f"« {nom_fichier} » ressemble à {a.doublon.numero} chez {client.nom} : importez-le quand même ou annulez.", "info")
+        return rediriger("/interventions/importer")
+    journaliser(db, u, "import intervention", f"{i.numero} depuis « {nom_fichier} » (rattaché à {client.nom})")
+    autres, _ = mi.reessayer_attentes(db, u) if memoriser else ([], [])
+    db.commit()
+    flash(request, f"« {nom_fichier} » rattaché à {client.nom} : {i.numero}, à vérifier."
+                   + (f" {len(autres)} autre(s) rapport(s) en attente reconnu(s) du même coup." if autres else ""))
+    return rediriger("/interventions/importer")
+
+
+@routes.post("/interventions/attente/{aid}/accepter", dependencies=[Depends(verifier_csrf)])
+def accepter_doublon(request: Request, aid: int, u=Depends(operateur), db: SessionDB = Depends(session_db)):
+    """Doublon probable : l'utilisateur confirme qu'il s'agit bien d'une autre intervention."""
+    a = _attente(db, aid)
+    if a.motif != "doublon" or a.client is None:
+        raise HTTPException(400, "Ce document n'est pas signalé comme doublon probable.")
+    nom_fichier, ressemblance = a.nom_fichier, a.doublon.numero if a.doublon else "—"
+    i, _ = mi.resoudre_attente(db, a, a.client, u, forcer=True)
+    journaliser(db, u, "import intervention", f"{i.numero} depuis « {nom_fichier} » (importé malgré la ressemblance avec {ressemblance})")
+    db.commit()
+    flash(request, f"« {nom_fichier} » importé quand même : {i.numero}, à vérifier.")
+    return rediriger("/interventions/importer")
+
+
+@routes.post("/interventions/attente/{aid}/supprimer", dependencies=[Depends(verifier_csrf)])
+def supprimer_attente(request: Request, aid: int, u=Depends(operateur), db: SessionDB = Depends(session_db)):
+    a = _attente(db, aid)
+    fichier, nom = a.fichier, a.nom_fichier
+    doublon = a.motif == "doublon"
+    journaliser(db, u, "import annulé (doublon probable)" if doublon else "import en attente supprimé", nom)
+    db.delete(a)
+    db.commit()
+    supprimer_fichier(fichier)
+    flash(request, f"Import de « {nom} » annulé." if doublon else f"« {nom} » retiré.")
+    return rediriger("/interventions/importer")
+
+
+@routes.get("/interventions/attente/{aid}/original")
+def original_attente(aid: int, u=Depends(operateur), db: SessionDB = Depends(session_db)):
+    a = _attente(db, aid)
+    return FileResponse(absolu(a.fichier), media_type=type_mime(a.fichier), filename=a.nom_fichier)
 
 
 @routes.post("/interventions/{iid}/confirmer-import", dependencies=[Depends(verifier_csrf)])

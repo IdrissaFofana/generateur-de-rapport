@@ -25,7 +25,7 @@
       <div class="aide">{{ c.editeur }}{% if c.numero %} · n° <span class="mono">{{ c.numero }}</span>{% endif %} · obtenue le {{ c.obtenue_le | fdate }}</div>
       <span class="etiquette {{ {'valide': 'ok', 'bientot': 'alerte', 'expiree': 'erreur'}[cle] }}">{{ lib }}</span>
       {% if c.fichier %}<a class="fichier" href="/certifications/{{ c.id }}/fichier" style="margin-left:8px;font-size:.84rem">{{ c.nom_fichier }}</a>{% endif %}</div>
-    {% if modifiable %}<form method="post" action="/certifications/{{ c.id }}/supprimer" onsubmit="return confirm('Supprimer cette certification et son justificatif ?')">
+    {% if modifiable %}<form method="post" action="/certifications/{{ c.id }}/supprimer" data-confirmer="Supprimer cette certification et son justificatif ?">
       <input type="hidden" name="csrf" value="{{ csrf }}"><button class="bouton petit danger" type="submit">Supprimer</button></form>{% endif %}
   </div>
   {% else %}<p class="aide">Aucune certification enregistrée.</p>{% endfor %}
@@ -68,7 +68,7 @@
     <input type="hidden" name="notes" value="{{ f.notes }}">
     </fieldset>
     {% if modifiable %}<div class="en-ligne"><button class="bouton petit" type="submit">Enregistrer</button>
-      <button class="bouton petit danger" type="submit" formaction="/formations/{{ f.id }}/supprimer" onclick="return confirm('Supprimer cette formation ?')">Supprimer</button></div>{% endif %}
+      <button class="bouton petit danger" type="submit" formaction="/formations/{{ f.id }}/supprimer" data-confirmer="Supprimer cette formation ?">Supprimer</button></div>{% endif %}
   </form>
   {% else %}<p class="aide">Aucune formation enregistrée.</p>{% endfor %}
   {% if modifiable %}

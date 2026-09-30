@@ -149,22 +149,107 @@ def actions_pour_plan(db, client_id, annee, mois):
 # --------------------------------------------------------------------------- #
 # Import d'anciens rapports (PDF / Word) : fichier conservé, champs extraits, vérification humaine
 # --------------------------------------------------------------------------- #
-def importer(db, contenu, extension, nom_fichier_origine, utilisateur, client_defaut=None):
-    """Crée une intervention « à vérifier » à partir d'un ancien rapport. Lève ValueError si le client est introuvable."""
-    from .moteur.import_intervention import analyser, extraire_texte
+def _analyser(db, texte):
+    from .moteur.import_intervention import analyser
     from .modeles import Client, Utilisateur
+    clients = [(c.id, c.nom, c.code_rapport, c.tenants_mdr, c.autres_noms or []) for c in db.scalars(select(Client))]
+    return analyser(texte, clients, db.scalars(select(Utilisateur.nom)).all())
+
+
+# Doublon probable : même client et contenu très proche. Fenêtre de dates : deux assistances mensuelles se ressemblent
+# d'un mois sur l'autre sans être des doublons ; hors fenêtre, seul un texte quasi identique (réexport) est signalé.
+FENETRE_DOUBLON_JOURS = 7
+SEUIL_DOUBLON = 0.6        # dates proches (ou inconnues d'un côté)
+SEUIL_DOUBLON_TEXTE = 0.85  # dates éloignées : texte quasi identique
+
+
+def similarite(objet_a, resultat_a, texte_a, objet_b, resultat_b, texte_b):
+    """Similarité de Jaccard (0 à 1) sur les mots significatifs : du contenu structuré (objet + actions) et, quand les
+    deux textes intégraux existent (deux imports), du texte complet. On retient la plus forte."""
+    from .service_technique import jaccard, mots_significatifs
+    structure = jaccard(mots_significatifs(" ".join([objet_a or "", *(resultat_a or [])])),
+                        mots_significatifs(" ".join([objet_b or "", *(resultat_b or [])])))
+    texte = jaccard(mots_significatifs(texte_a), mots_significatifs(texte_b)) if texte_a and texte_b else 0.0
+    return max(structure, texte)
+
+
+def chercher_doublon(db, client_id, champs, texte):
+    """Intervention existante du même client qui ressemble au document importé : (intervention, score) ou (None, 0)."""
+    meilleur, score_max = None, 0.0
+    for i in db.scalars(select(Intervention).where(Intervention.client_id == client_id)):
+        score = similarite(champs["objet"], champs["resultat"], texte, i.objet, i.resultat, i.texte_source)
+        proche = champs["date_debut"] is None or abs((i.date_debut - champs["date_debut"]).days) <= FENETRE_DOUBLON_JOURS
+        if score >= (SEUIL_DOUBLON if proche else SEUIL_DOUBLON_TEXTE) and score > score_max:
+            meilleur, score_max = i, score
+    return meilleur, round(score_max, 2)
+
+
+def importer(db, contenu, extension, nom_fichier_origine, utilisateur, client_force=None):
+    """Importe un ancien rapport. Renvoie (intervention, champs manquants), ou (None, import en attente) quand le
+    client n'est pas reconnu ou que le document ressemble à une intervention existante (doublon probable) : la
+    décision revient alors à l'utilisateur. Lève ValueError pour un fichier identique déjà importé."""
+    from .modeles import Client, ImportEnAttente
+    from .moteur.import_intervention import extraire_texte
     from .stockage import empreinte, enregistrer
     h = empreinte(contenu)
     doublon = db.scalar(select(Intervention).where(Intervention.fichier_source.like(f"%{h}%")))
     if doublon is not None:
         raise ValueError(f"déjà importé ({doublon.numero})")
+    if db.scalar(select(ImportEnAttente.id).where(ImportEnAttente.empreinte == h)):
+        raise ValueError("déjà en attente (voir la liste ci-dessous)")
     texte = extraire_texte(contenu, extension)
-    clients = [(c.id, c.nom, c.code_rapport, c.tenants_mdr) for c in db.scalars(select(Client))]
-    noms = db.scalars(select(Utilisateur.nom)).all()
-    champs = analyser(texte, clients, noms)
-    client = db.get(Client, champs["client_id"] or client_defaut) if (champs["client_id"] or client_defaut) else None
-    if client is None:
-        raise ValueError("client non reconnu dans le document : choisissez un client par défaut")
+    champs = _analyser(db, texte)
+    client = db.get(Client, client_force or champs["client_id"]) if (client_force or champs["client_id"]) else None
+    semblable, score = chercher_doublon(db, client.id, champs, texte) if client else (None, 0)
+    if client is None or semblable is not None:
+        chemin, _ = enregistrer(contenu, "imports", "attente", extension=extension)
+        attente = ImportEnAttente(fichier=chemin, nom_fichier=nom_fichier_origine[:300], extension=extension, empreinte=h,
+                                  texte=texte, nom_detecte=champs.get("client_nom"), cree_par_id=utilisateur.id,
+                                  motif="doublon" if semblable else "client", client_id=client.id if client else None,
+                                  doublon_id=semblable.id if semblable else None, similarite=score or None)
+        db.add(attente)
+        db.flush()
+        return None, attente
+    return _creer_import(db, contenu, extension, nom_fichier_origine, utilisateur, texte, champs, client)
+
+
+def resoudre_attente(db, attente, client, utilisateur, forcer=False):
+    """Rattache un import en attente à un client et crée l'intervention à vérifier. Sans « forcer », un doublon
+    probable chez ce client laisse le document en attente (motif « doublon ») : renvoie alors (None, attente)."""
+    from .stockage import absolu, supprimer
+    champs = _analyser(db, attente.texte)
+    if not forcer:
+        semblable, score = chercher_doublon(db, client.id, champs, attente.texte)
+        if semblable is not None:
+            attente.motif, attente.client_id, attente.doublon_id, attente.similarite = "doublon", client.id, semblable.id, score
+            db.flush()
+            return None, attente
+    with open(absolu(attente.fichier), "rb") as f:
+        contenu = f.read()
+    intervention, manquants = _creer_import(db, contenu, attente.extension, attente.nom_fichier, utilisateur,
+                                            attente.texte, champs, client)
+    fichier = attente.fichier
+    db.delete(attente)
+    db.flush()
+    supprimer(fichier)
+    return intervention, manquants
+
+
+def reessayer_attentes(db, utilisateur):
+    """Relance la reconnaissance des imports en attente de client (après création d'un client ou ajout d'un autre
+    nom). Renvoie (interventions créées, imports devenus « doublon probable »)."""
+    from .modeles import Client, ImportEnAttente
+    crees, doublons = [], []
+    for a in db.scalars(select(ImportEnAttente).where(ImportEnAttente.motif == "client").order_by(ImportEnAttente.id)).all():
+        cid = _analyser(db, a.texte)["client_id"]
+        if cid:
+            i, _ = resoudre_attente(db, a, db.get(Client, cid), utilisateur)
+            (crees if i else doublons).append(i or a)
+    return crees, doublons
+
+
+def _creer_import(db, contenu, extension, nom_fichier_origine, utilisateur, texte, champs, client):
+    from .stockage import enregistrer
     jour = champs["date_debut"] or date.today()
     intervention = creer(db, client, champs["type"] or "assistance", utilisateur, jour)
     chemin, _ = enregistrer(contenu, "interventions", "import", str(client.id), extension=extension)

@@ -81,7 +81,15 @@ Interventions → Bibliothèque d'actions : ajout par tous, modification et supp
 - **Connaissances** : recherche dans toutes les interventions ; problèmes rencontrés chez plusieurs clients.
 - **Rapport du service** : rapport d'activité mensuel, trimestriel, semestriel ou annuel, calculé puis relu et validé.
 - **Import** (Interventions → Importer d'anciens rapports) : PDF ou Word ; les champs sont extraits puis vérifiés
-  avant confirmation ; le fichier d'origine reste la référence.
+  avant confirmation ; le fichier d'origine reste la référence. Le client est reconnu par son nom, ses **autres noms**
+  (fiche client) ou ses tenants, sans tenir compte des majuscules, accents et tirets. Un rapport d'un client non
+  enregistré est placé **en attente** : le rattacher à un client existant (« retenir ce nom » l'ajoute à ses autres
+  noms) ou créer le client — les rapports en attente qui le citent lui sont alors rattachés automatiquement. Le choix
+  manuel d'un client ne vaut que pour un fichier seul.
+  **Doublons** : un fichier identique déjà importé est refusé. Un document qui **ressemble** fortement à une
+  intervention du même client (même rapport en Word et en PDF, réexport, rapport déjà saisi) apparaît dans
+  « Doublons probables » avec le rapport concerné et le pourcentage de similarité : **Importer quand même** ou
+  **Annuler l'import**.
 
 ### Suivi du parc (fiche client → **Suivi du parc**)
 

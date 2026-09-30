@@ -6,6 +6,14 @@ quelles données.
 
 > Confidentialité : clients désignés Client A, B, C, D ; noms d'appareils et adresses remplacés.
 
+**Titre de travail** : *Plateforme locale et sécurisée de pilotage d'un service de sécurité managée : analyse par
+apprentissage automatique et génération vérifiable de rapports par modèle de langage.*
+
+**Plan d'ensemble**
+1. Introduction · 2. État de l'art · 3. Contexte et existant · 4. Conception et réalisation (volet A : reporting
+client ; volet B : service technique) · 5. Sécurité · 6. Apprentissage automatique · 7. Modèle de langage et
+vérification des faits · 8. Expérimentations (H1 à H5) · 9. Conclusion.
+
 ---
 
 ## Résumé ⏳
@@ -26,12 +34,20 @@ Chez ESAY Corporation, partenaire Kaspersky, ces rapports étaient produits à l
 hétérogènes (rapports hebdomadaires du service MDR, exports de la console Kaspersky Security Center transmis
 par chaque client). Ce travail est long, répétitif, sujet aux erreurs de recopie, et sa qualité dépend du rédacteur.
 
+Le même constat vaut pour l'**exploitation du service technique** : rapports d'intervention rédigés sous Word,
+engagement d'assistance mensuelle suivi de mémoire, rapport d'activité semestriel du service compilé à la main,
+certifications des techniciens suivies de manière informelle. Le savoir-faire accumulé dans les rapports
+d'intervention passés reste inexploité : un problème déjà résolu chez un client est souvent re-diagnostiqué chez
+un autre.
+
 ### 1.2 Problématique
 Automatiser ce reporting soulève trois difficultés :
 1. **Extraire et consolider** des données fiables depuis des sources semi-structurées et incomplètes ;
 2. **Analyser** ces données au-delà de simples seuils, alors que l'historique est court et les incidents rares ;
 3. **Rédiger** des textes utiles au client sans introduire d'erreur, alors que les modèles de langage peuvent
-   inventer des faits et que les données, confidentielles, ne peuvent pas quitter l'infrastructure.
+   inventer des faits et que les données, confidentielles, ne peuvent pas quitter l'infrastructure ;
+4. **Capitaliser** sur l'historique des interventions pour guider les interventions futures, à partir de documents
+   hétérogènes rédigés librement.
 
 À cela s'ajoute une exigence transversale : une plateforme qui centralise les données de sécurité de plusieurs
 clients devient elle-même une **cible** ; sa sécurité et celle de son infrastructure font partie du problème.
@@ -40,14 +56,24 @@ clients devient elle-même une **cible** ; sa sécurité et celle de son infrast
 *Un modèle de langage exécuté en local, encadré par des données structurées et un vérificateur de faits,
 peut-il produire des textes de rapport de sécurité jugés aussi utiles que ceux d'un expert, sans erreur factuelle ?*
 Hypothèses H1 à H3 : voir `AXES.md`, axe 1. H4 (partie professionnelle) : la plateforme réduit le temps de
-production et le nombre de corrections.
+production des rapports (clients et service) et améliore la conformité des assistances mensuelles.
+H5 (contribution secondaire) : la suggestion d'actions par similarité sémantique est plus précise que la référence
+lexicale.
 
 ### 1.4 Contributions ⏳ (à confirmer par les résultats)
-1. Une architecture de production de rapports de sécurité hébergée en local, à partir de sources MDR/EDR.
-2. Une détection d'anomalies adaptée à des données rares (télémétrie MDR, priorisation des appareils).
-3. Une chaîne de rédaction hybride avec vérification des faits.
-4. Une évaluation de la robustesse à l'injection de prompt indirecte via les données de sécurité.
-5. Une infrastructure segmentée et durcie, évaluée par des outils d'audit.
+**Contribution principale**
+1. Une chaîne de rédaction hybride (données structurées + modèle de langage local) avec vérification des faits,
+   évaluée sur les rapports clients et généralisée au rapport du service.
+2. Une évaluation de la robustesse à l'injection de prompt indirecte via les données de sécurité et les documents
+   importés.
+
+**Contributions secondaires**
+3. Une suggestion d'actions à partir des interventions passées similaires (ML4), comparée à une référence lexicale.
+4. Une détection d'anomalies adaptée à des données rares (télémétrie MDR).
+
+**Contributions professionnelles**
+5. Une plateforme hébergée en local couvrant le reporting de sécurité client et l'exploitation du service technique.
+6. Une infrastructure segmentée et durcie, évaluée par des outils d'audit.
 
 ### 1.5 Organisation du document ⏳
 
@@ -58,9 +84,11 @@ production et le nombre de corrections.
 - 2.2 Extraction d'information depuis des documents semi-structurés
 - 2.3 Détection d'anomalies dans les séries temporelles et sur données rares (Isolation Forest, décompositions saisonnières)
 - 2.4 Génération de texte à partir de données (data-to-text), modèles de langage, hallucinations et vérification des faits
-- 2.5 Sécurité des applications à base de LLM : injection de prompt directe et indirecte
-- 2.6 Sécurité des applications web (OWASP), authentification forte, journalisation infalsifiable
-- 2.7 Positionnement du travail
+- 2.5 Recherche d'information et recommandation : similarité lexicale (Jaccard), TF-IDF, plongements sémantiques,
+  raisonnement à partir de cas (retrouver un cas passé similaire pour résoudre le nouveau)
+- 2.6 Sécurité des applications à base de LLM : injection de prompt directe et indirecte
+- 2.7 Sécurité des applications web (OWASP), authentification forte, journalisation infalsifiable
+- 2.8 Positionnement du travail
 
 ---
 
@@ -79,13 +107,19 @@ en assure l'administration et le suivi. Le portefeuille étudié compte quatre c
 | Export KSC « Menaces » | Détections, catégories, appareils touchés | Mensuel, par client | Détail parfois tronqué par la console |
 | Export KSC « Vulnérabilités » | Vulnérabilités par application et gravité | Mensuel, par client | Détail limité à 1 000 lignes ; totaux fiables dans le récapitulatif |
 
-### 3.3 Le processus manuel ⏳ (mesures à faire)
-Décrire le circuit (collecte, recopie, graphiques, rédaction, relecture, envoi) et **mesurer** : temps moyen par
-rapport, nombre de corrections, délai après la fin du mois. Ces valeurs servent de référence pour H4.
+### 3.3 Les processus manuels ⏳ (mesures à faire avant adoption)
+Deux circuits à décrire et à **mesurer**, références pour H4 :
+- **Rapport mensuel client** : collecte, recopie, graphiques, rédaction, relecture, envoi — temps moyen par
+  rapport, nombre de corrections, délai après la fin du mois.
+- **Service technique** : rapport d'intervention sous Word (temps de rédaction), suivi des assistances mensuelles
+  (mois sans assistance, constatés a posteriori), rapport d'activité semestriel compilé à la main (temps de
+  compilation), suivi des certifications.
 
 ### 3.4 Besoins et contraintes
-- Fonctionnels : dépôt des sources, consolidation, rapport PDF à la charte, relecture et validation, suivi des
-  actions d'un mois sur l'autre, bilans périodiques, rapports d'intervention, pilotage du portefeuille.
+- Fonctionnels (volet A) : dépôt des sources, consolidation, rapport PDF à la charte, relecture et validation,
+  suivi des actions d'un mois sur l'autre, bilans périodiques, pilotage du portefeuille.
+- Fonctionnels (volet B) : rapports d'intervention, assistance mensuelle garantie, suivi des techniciens, reprise
+  de l'historique, rapport d'activité du service.
 - Non fonctionnels : **hébergement local** (pas d'accès distant aux consoles des clients, données confidentielles),
   traçabilité, rôles (lecteur, opérateur, validateur, administrateur), robustesse face aux données manquantes.
 
@@ -108,6 +142,8 @@ versionnés), journal, contrats, alertes, envois, interventions, bibliothèque. 
 textes d'un rapport sont stockés en JSONB et **figés à la validation** (le PDF archivé reste la référence).
 Évolution du schéma par migrations Alembic appliquées au démarrage. ⏳ Diagramme entité-association.
 
+### Volet A — Reporting de sécurité client
+
 ### 4.3 Chaîne de traitement d'un rapport mensuel
 1. Dépôt des hebdos MDR (une fois pour tous les clients) et des exports KSC (par client) ; empreinte SHA-256
    (dédoublonnage, nom de fichier non contrôlé par l'utilisateur).
@@ -126,6 +162,8 @@ textes d'un rapport sont stockés en JSONB et **figés à la validation** (le PD
 ### 4.5 Pilotage du portefeuille
 Vue d'ensemble, suivi du parc, contrats, alertes : description et captures ⏳.
 
+### Volet B — Exploitation du service technique
+
 ### 4.6 Service technique
 Au-delà du reporting client, la plateforme outille le **service technique** :
 - **Assistance mensuelle** : pour chaque client sous contrat, au moins une assistance par mois, planifiée
@@ -135,6 +173,14 @@ Au-delà du reporting client, la plateforme outille le **service technique** :
   (terminologie Kaspersky) filtrée par type d'intervention, titre du document selon le type, envoi au client.
 - **Import de l'historique** : anciens rapports PDF / Word lus automatiquement puis vérifiés ; le document d'origine
   fait foi. Cet import constitue le corpus exploitable par les volets d'analyse (base de connaissances, ML4).
+  Le client est reconnu par son nom, ses autres noms ou ses tenants, indépendamment de la casse, des accents et de la
+  ponctuation ; un document d'un client inconnu est **mis en attente** (jamais rattaché d'office), puis rattaché
+  manuellement ou automatiquement dès la création du client. Principe retenu : préférer une attente explicite à un
+  rattachement silencieux et possiblement faux.
+  Les **doublons** sont contrôlés à deux niveaux : fichier identique (empreinte SHA-256, refus) et **doublon
+  probable** sur le contenu (similarité de Jaccard ≥ 0,6 à dates proches, ≥ 0,85 sinon), soumis à la décision de
+  l'utilisateur (importer quand même / annuler). Sur les documents réels, le même rapport en Word et en PDF obtient
+  0,99 et deux rapports différents 0,12. Ce contrôle protège la qualité du corpus utilisé au chapitre 6.
 - **Base de connaissances** : recherche plein texte dans toutes les interventions, et détection des problèmes
   récurrents entre clients par similarité de Jaccard sur des mots racinisés.
 - **Techniciens** : parcours de formation, certifications avec justificatifs et échéances.
@@ -142,15 +188,17 @@ Au-delà du reporting client, la plateforme outille le **service technique** :
   par client et par technicien, faits marquants, incidents, problèmes récurrents, compétences, activités internes.
 ⏳ Captures et mesure du gain de temps sur le rapport semestriel (auparavant rédigé à la main).
 
+### Aspects transverses
+
 ### 4.7 Interface
 Choix de conception (hiérarchie, typographie, motif hexagonal, couleurs validées pour la lisibilité et le
 daltonisme, petits multiples plutôt que doubles axes) ⏳ captures.
 
 ### 4.8 Tests
-Deux niveaux de tests. **Tests unitaires** (pytest, 32 tests) sur les fonctions pures : conformité TOTP aux
+Deux niveaux de tests. **Tests unitaires** (pytest, 43 tests) sur les fonctions pures : conformité TOTP aux
 vecteurs de la RFC 6238, détection de falsification du journal, limiteur de tentatives, règles métier (jours à
 venir, périodes des bilans, fins de support, séries d'anomalies). **Tests de bout en bout** (8 suites,
-209 vérifications) qui pilotent l'application réelle (client HTTP de test, vraie base, vrais fichiers PDF) :
+220 vérifications) qui pilotent l'application réelle (client HTTP de test, vraie base, vrais fichiers PDF) :
 dépôts et analyse, cycle de vie des rapports, bilans, pilotage, interventions, sécurité, service technique
 (avec import des vrais rapports d'intervention historiques). Chaque suite nettoie ses
 données, à l'exception du journal d'audit, par conception (voir 5.3). ⏳ Couverture de code.
@@ -190,22 +238,28 @@ concurrentes. L'acteur est figé dans la ligne et la suppression d'un compte ne 
 l'empreinte de tête (« ancre ») hors de la base, prévu par l'envoi périodique vers un collecteur syslog (R3).
 ⏳ Figure : schéma de la chaîne ; mesure du surcoût d'écriture.
 - 5.4 Chiffrement au repos, pseudonymisation ⏳
-- 5.5 Architecture réseau segmentée et durcissement (R1, R4) ⏳
-- 5.6 Évaluation outillée : bandit, pip-audit, ZAP, Lynis — avant / après ⏳
+- 5.5 Fichiers déposés et données personnelles (S7) 🔄 : contrôle par signature binaire, stockage sous empreinte,
+  droits d'accès aux justificatifs ; conservation et droits des personnes ⏳
+- 5.6 Architecture réseau segmentée et durcissement (R1, R4) ⏳
+- 5.7 Évaluation outillée : bandit, pip-audit, ZAP, Lynis — avant / après ⏳
 
 ---
 
 ## Chapitre 6 — Analyse par apprentissage automatique ⏳
-- 6.1 Données, contraintes (rareté), générateur synthétique
+- 6.1 Données : télémétrie MDR (rare) et corpus des interventions (saisies + importées), générateur synthétique
 - 6.2 ML1 — anomalies de télémétrie : méthodes comparées, protocole d'injection, résultats
-- 6.3 ML2 — priorisation des appareils : caractéristiques, modèle, explications, résultats
+- 6.3 ML4 — interventions similaires et suggestion d'actions : référence Jaccard (en place), TF-IDF, plongements
+  locaux ; protocole par exclusion d'intervention, précision@k, rappel@k, avis des techniciens → H5
+- 6.4 ML2 — priorisation des appareils (si réalisé) : caractéristiques, modèle, explications, résultats
 
 ## Chapitre 7 — Rédaction par modèle de langage et vérification des faits ⏳
 - 7.1 Dossier de faits, rédaction, vérificateur
-- 7.2 Robustesse à l'injection de prompt indirecte (S1)
+- 7.2 Généralisation au rapport d'activité du service (LLM6)
+- 7.3 Robustesse à l'injection de prompt indirecte (S1) : données KSC et documents importés
 
 ## Chapitre 8 — Protocole expérimental et résultats ⏳
-Corpus anonymisé, métriques, évaluateurs, tests statistiques ; réponse à H1–H4 ; limites.
+Corpus anonymisé, métriques, évaluateurs, tests statistiques ; réponse à H1–H5 ; limites (taille du corpus,
+un seul éditeur de solutions de sécurité, subjectivité des notes).
 
 ## Chapitre 9 — Conclusion et perspectives ⏳
 

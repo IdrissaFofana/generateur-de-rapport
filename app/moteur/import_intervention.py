@@ -26,6 +26,27 @@ def _plat(texte):
     return unicodedata.normalize("NFKD", texte or "").encode("ascii", "ignore").decode().lower()
 
 
+def motif_nom(nom):
+    """Expression qui reconnaît un nom de client quelles que soient la casse, les accents et la ponctuation
+    entre ses mots : « PAC CI » ≈ « pac-ci » ≈ « PACCI » ≈ « Pac.CI ». None si le nom est trop court."""
+    mots = re.findall(r"[a-z0-9]+", _plat(nom))
+    if not mots or len("".join(mots)) < 3:
+        return None
+    return re.compile(r"(?<![a-z0-9])" + r"[^a-z0-9\n]{0,3}".join(map(re.escape, mots)) + r"(?![a-z0-9])")
+
+
+RE_CLIENT_ECRIT = re.compile(r"^\s*(?:nom\s+du\s+)?client\s*(?::|\||\t)\s*([^\n|]{2,80}?)\s*$", re.IGNORECASE | re.MULTILINE)
+
+
+def nom_client_ecrit(texte):
+    """Nom écrit après « Client : » (ou dans une cellule « Client | … »), s'il y en a un exploitable."""
+    for m in RE_CLIENT_ECRIT.finditer(texte or ""):
+        valeur = m.group(1).strip(" .:·-–")
+        if len(valeur) >= 2 and not set(valeur) <= set(". …_"):
+            return valeur[:200]
+    return None
+
+
 def extraire_texte(contenu, extension):
     """Texte brut d'un PDF (PyMuPDF) ou d'un Word (paragraphes puis cellules des tableaux, dans l'ordre)."""
     if extension == ".pdf":
@@ -117,15 +138,15 @@ def analyser(texte, clients, utilisateurs=()):
          "intervenants": [], "objet": "", "contexte": "", "resultat": [], "statut_global": None, "points_bloquants": [],
          "recommandations": []}
 
-    # Client : nom (ou tenant) d'un client connu le plus cité, ou valeur après « Client : »
+    # Client : le client connu (nom, autres noms, tenants) le plus cité ; et le nom écrit après « Client : »
     scores = {}
-    for cid, nom, code, tenants in clients:
-        for cle in {nom, *(tenants or [])}:
-            if cle and len(cle) >= 3:
-                n = len(re.findall(r"(?<![a-z0-9])" + re.escape(_plat(cle)) + r"(?![a-z0-9])", plat))
-                scores[cid] = scores.get(cid, 0) + n
+    for cid, nom, code, tenants, *reste in clients:
+        for cle in {nom, *(tenants or []), *(reste[0] if reste else [])}:
+            n = len(motif_nom(cle).findall(plat)) if motif_nom(cle) else 0
+            scores[cid] = scores.get(cid, 0) + n
     if scores and max(scores.values()) > 0:
         r["client_id"] = max(scores, key=scores.get)
+    r["client_nom"] = nom_client_ecrit(texte)
 
     # Type : d'abord dans le début du document (titre), puis partout
     for zone in (plat[:600], plat):

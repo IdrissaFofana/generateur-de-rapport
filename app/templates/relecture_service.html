@@ -18,7 +18,7 @@
     {% elif modifiable %}
       <form method="post" action="/service/{{ r.id }}/actualiser"><input type="hidden" name="csrf" value="{{ csrf }}">
         <button class="bouton secondaire" type="submit">Actualiser les chiffres</button></form>
-      <form method="post" action="/service/{{ r.id }}/valider" onsubmit="return confirm('Valider le rapport ? Le PDF définitif sera archivé.')">
+      <form method="post" action="/service/{{ r.id }}/valider" data-confirmer="Valider le rapport ? Le PDF définitif sera archivé.">
         <input type="hidden" name="csrf" value="{{ csrf }}"><button class="bouton valider" type="submit">Valider</button></form>
     {% endif %}
   </div>

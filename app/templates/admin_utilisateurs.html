@@ -40,7 +40,7 @@
   <td class="fin"><span class="en-ligne" style="justify-content:flex-end;flex-wrap:nowrap">
     <button class="bouton petit" type="submit" form="f{{ x.id }}">Enregistrer</button>
     <form method="post" action="/admin/utilisateurs/{{ x.id }}/reinitialiser" style="display:inline"
-          onsubmit="return confirm('Générer un nouveau mot de passe provisoire pour {{ x.email }} ?')">
+          data-confirmer="Générer un nouveau mot de passe provisoire pour {{ x.email }} ?">
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <button class="bouton petit fantome" type="submit" title="Générer un nouveau mot de passe provisoire">Réinitialiser</button>
     </form>
@@ -48,7 +48,7 @@
     <form method="post" action="/admin/utilisateurs/{{ x.id }}/deverrouiller"><input type="hidden" name="csrf" value="{{ csrf }}">
       <button class="bouton petit fantome" type="submit">Déverrouiller</button></form>{% endif %}
     {% if x.totp_actif %}
-    <form method="post" action="/admin/utilisateurs/{{ x.id }}/reinitialiser-2fa" onsubmit="return confirm('Réinitialiser la double authentification de {{ x.email }} (téléphone perdu) ?')">
+    <form method="post" action="/admin/utilisateurs/{{ x.id }}/reinitialiser-2fa" data-confirmer="Réinitialiser la double authentification de {{ x.email }} (téléphone perdu) ?">
       <input type="hidden" name="csrf" value="{{ csrf }}"><button class="bouton petit fantome" type="submit" title="Téléphone perdu">Réinit. 2FA</button></form>{% endif %}</span>
   </td>
 </tr>

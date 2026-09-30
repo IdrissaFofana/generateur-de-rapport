@@ -412,11 +412,11 @@ table.chaleur tbody th { text-align: left; font-family: var(--sans); font-size: 
 table.chaleur tbody th a { color: var(--encre); text-decoration: none; }
 table.chaleur tbody th a:hover { color: var(--cyan); }
 table.chaleur td { padding: 0; text-align: center; }
-.case { display: grid; place-items: center; min-width: 38px; height: 32px; border-radius: 4px; font-family: var(--mono); font-size: .72rem; font-weight: 600;
+table.chaleur .case, .legende-risque .case { display: grid; place-items: center; min-width: 38px; height: 32px; border-radius: 4px; font-family: var(--mono); font-size: .72rem; font-weight: 600;
         font-style: normal; color: #fff; text-decoration: none; background: var(--c, var(--neutre)); transition: transform .12s, box-shadow .12s; }
-a.case:hover { transform: scale(1.08); box-shadow: 0 2px 8px rgba(19,33,43,.2); color: #fff; }
-.case.critique { --c: var(--critique); } .case.eleve { --c: #C2410C; } .case.modere { --c: #B7791F; } .case.faible { --c: var(--ok); }
-.case.sans-rapport { background: repeating-linear-gradient(135deg, var(--voile), var(--voile) 4px, var(--filet) 4px, var(--filet) 5px); }
+table.chaleur a.case:hover { transform: scale(1.08); box-shadow: 0 2px 8px rgba(19,33,43,.2); color: #fff; }
+table.chaleur .case.critique, .legende-risque .case.critique { --c: var(--critique); } table.chaleur .case.eleve, .legende-risque .case.eleve { --c: #C2410C; } table.chaleur .case.modere, .legende-risque .case.modere { --c: #B7791F; } table.chaleur .case.faible, .legende-risque .case.faible { --c: var(--ok); }
+table.chaleur .case.sans-rapport { background: repeating-linear-gradient(135deg, var(--voile), var(--voile) 4px, var(--filet) 4px, var(--filet) 5px); }
 .legende-risque { gap: 8px 18px; }
 .legende-risque span { display: inline-flex; align-items: center; gap: 6px; }
 .legende-risque .case { min-width: 22px; height: 18px; font-size: .6rem; }
@@ -589,3 +589,22 @@ details.reporter form { position: absolute; right: 0; z-index: 3; margin-top: 6p
 .types { display: flex; flex-wrap: wrap; gap: 4px; }
 .panneau-biblio > * { flex-shrink: 0; }
 .panneau-biblio > .biblio-liste { flex: 1 1 auto; min-height: 0; flex-shrink: 1; }
+table.liste a.fichier.docx::before { content: "DOCX"; color: var(--marine); }
+
+/* ---------- Modale de confirmation ---------- */
+dialog.modale { border: 0; padding: 0; border-radius: 10px; width: min(460px, calc(100vw - 32px)); background: var(--surface); color: var(--encre);
+                box-shadow: 0 24px 60px rgba(19,33,43,.28); border-top: 4px solid var(--marine); }
+dialog.modale.danger { border-top-color: var(--critique); }
+dialog.modale::backdrop { background: rgba(19,33,43,.45); backdrop-filter: blur(2px); }
+dialog.modale[open] { animation: modale-entree .16s ease-out; }
+@keyframes modale-entree { from { opacity: 0; transform: translateY(8px) scale(.98); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { dialog.modale[open] { animation: none; } }
+.modale form { padding: 22px 24px 20px; margin: 0; }
+.modale-tete { display: flex; align-items: center; gap: 12px; }
+.modale-tete h2 { margin: 0; font-size: 1.08rem; }
+.modale-icone { width: 30px; height: 27px; flex: none; clip-path: var(--hex); background: var(--marine); }
+.modale.danger .modale-icone { background: var(--critique); }
+#modale-message { margin: 14px 0 22px; line-height: 1.55; color: var(--encre-2); }
+.modale-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.bouton.danger-plein { background: var(--critique); border-color: var(--critique); color: #fff; }
+.bouton.danger-plein:hover { filter: brightness(.92); }

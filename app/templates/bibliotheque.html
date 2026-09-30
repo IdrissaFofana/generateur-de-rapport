@@ -41,7 +41,7 @@
   <td><input type="checkbox" name="actif" value="true" form="e{{ e.id }}" {{ 'checked' if e.actif }} aria-label="Actif"></td>
   <td class="fin"><span class="en-ligne" style="justify-content:flex-end;flex-wrap:nowrap">
     <button class="bouton petit" type="submit" form="e{{ e.id }}">Enregistrer</button>
-    <form method="post" action="/bibliotheque/{{ e.id }}/supprimer" onsubmit="return confirm('Supprimer cet élément ?')">
+    <form method="post" action="/bibliotheque/{{ e.id }}/supprimer" data-confirmer="Supprimer cet élément ?">
       <input type="hidden" name="csrf" value="{{ csrf }}"><button class="bouton petit danger" type="submit">Supprimer</button></form></span></td>
   {% else %}
   <td class="aide">{{ e.categorie }}</td><td>{{ e.libelle }}</td><td>{{ "oui" if e.actif else "non" }}</td><td></td>

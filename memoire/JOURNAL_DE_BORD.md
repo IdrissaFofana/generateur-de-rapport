@@ -192,3 +192,85 @@ des techniciens, et importer les anciens rapports d'intervention pour constituer
 | Suites de bout en bout | 8 — 209 vérifications, toutes réussies (dont essai_service : 35) |
 | Journal après l'ensemble des tests | 271 lignes, chaîne intacte |
 | Migrations de schéma | 7 |
+
+## 30/09/2026 — Restructuration du mémoire
+
+- Titre élargi : *Plateforme locale et sécurisée de pilotage d'un service de sécurité managée…* ; deux volets
+  professionnels (A : reporting client, B : service technique).
+- ML4 (interventions similaires et suggestion d'actions) devient une **contribution secondaire** avec son
+  hypothèse H5 ; il passe en phase 4 avec ML1, ML2 devient optionnel.
+- Nouveaux éléments : LLM6 (généralisation au rapport du service), S1 étendu aux documents importés, S7 (fichiers
+  déposés et données personnelles).
+- Règles contre la dispersion adoptées : une seule question principale ; sans métrique, pas de place aux
+  chapitres 6 et 7.
+- Limite relevée à l'import : un rapport d'un client **non enregistré** est refusé (sans client par défaut) ou
+  rattaché au client par défaut choisi — risque de mauvais rattachement si le client par défaut est utilisé pour un
+  lot mêlant plusieurs clients.
+
+## 30/09/2026 — Import : clients non enregistrés et autres noms ✅
+
+- **Autres noms** du client (sigle, nom complet, ancien nom) utilisés pour la reconnaissance, en plus du nom et des
+  tenants MDR. Migration 0008.
+- **Reconnaissance tolérante** : casse, accents et ponctuation entre les mots ignorés (« PAC CI » ≈ « pac-ci » ≈
+  « PACCI »), toujours par mot entier (« HUDSON » ne reconnaît pas « hudsonville »).
+- **Nom écrit dans le document** extrait (« Client : … » ou cellule « Client | … »), en ignorant les modèles vierges
+  (« ...... »).
+- **Imports en attente de client** : un rapport non reconnu n'est plus refusé ni rattaché d'office ; il est conservé
+  avec le nom détecté jusqu'à ce qu'on le **rattache** à un client existant (option « retenir ce nom » → ajouté aux
+  autres noms du client) ou qu'un administrateur **crée le client** (formulaire pré-rempli). À l'enregistrement d'un
+  client, tous les imports en attente sont réanalysés et rattachés automatiquement s'ils sont reconnus.
+- **Décision** : le client choisi à la main n'est appliqué qu'à un **fichier seul** ; dans un lot, il est ignoré.
+  *Motif* : un choix global sur un lot mêlant plusieurs clients produisait des rattachements erronés, silencieux
+  (cas constaté pendant les tests de la version précédente).
+- *Défaut découvert par une capture d'écran* : le style des cases de la carte de chaleur (Vue d'ensemble) portait
+  sur la classe générique `.case`, également utilisée par toutes les cases à cocher des formulaires, dont il masquait
+  le libellé. Style limité à la carte de chaleur et à sa légende.
+
+| Mesure | Valeur |
+|---|---|
+| Tests unitaires (pytest) | 41 / 41 |
+| Suites de bout en bout | 8 — 216 vérifications, toutes réussies (essai_service : 42) |
+| Migrations de schéma | 8 |
+
+## 30/09/2026 — Import : doublons probables ✅
+
+**Problème** : le contrôle par empreinte SHA-256 ne reconnaît que des fichiers identiques octet pour octet. Le même
+rapport en Word puis en PDF, un PDF réexporté ou l'ancien PDF d'une intervention déjà saisie passaient sans alerte
+et gonflaient les statistiques (et fausseraient le corpus de ML4).
+
+**Solution** : détection de **doublon probable** sur le contenu, parmi les interventions du même client.
+- Similarité de Jaccard sur les mots significatifs (racinisation légère) : du contenu structuré (objet + actions)
+  et, lorsque les deux textes intégraux existent, du texte complet ; on retient la plus forte.
+- Seuils : **0,6** si les dates sont à 7 jours ou moins (ou inconnues) ; **0,85** au-delà (seul un réexport quasi
+  identique est alors signalé). *Motif* : deux assistances mensuelles de mois consécutifs se ressemblent (0,71) sans
+  être des doublons.
+- **Décision de l'utilisateur** : un doublon probable n'est ni refusé ni importé ; il est mis en attente avec le
+  rapport auquel il ressemble et le score, et l'utilisateur choisit **« Importer quand même »** ou **« Annuler
+  l'import »** (fichier supprimé). Le contrôle s'applique aussi quand un import en attente de client est rattaché.
+
+**Mesures sur documents réels**
+
+| Paire comparée | Similarité | Résultat |
+|---|---|---|
+| Même rapport de migration, Word et PDF | 0,99 | doublon signalé |
+| Rapport de migration et rapport de déploiement (clients différents) | 0,12 | — |
+| Rapport importé et même contenu saisi (sans texte intégral) | 1,00 | doublon signalé |
+| Deux assistances mensuelles de mois consécutifs (dates éloignées) | 0,71 | non signalé (< 0,85) |
+
+Tests : 43 unitaires ; 8 suites, 220 vérifications (essai_service : 46). Migration 0009.
+
+## 30/09/2026 — Modale de confirmation ✅
+
+- Les 26 confirmations avant action (suppressions, validations, envois, réinitialisations, import) utilisaient la boîte
+  native du navigateur (`confirm()`), hors charte et impossible à mettre en forme. Remplacées par une **modale** unique
+  (élément `<dialog>` natif : focus piégé, touche Échap, fond assombri) déclenchée par un attribut déclaratif
+  `data-confirmer="message"` sur le formulaire ou le bouton ; aucun `console.log` dans le code du projet.
+- Ergonomie : variante « Action irréversible » (rouge) pour les suppressions et réinitialisations, avec le **focus
+  sur « Annuler »** (une validation au clavier ne détruit rien) ; libellé du bouton repris du verbe de l'action
+  (« Supprimer », « Valider », « Envoyer »…).
+- Vérifié dans Chrome sans fenêtre sur une page d'essai : annuler (rien n'est envoyé), confirmer (envoi), bouton avec
+  sa propre action (`formaction` conservée), aucune erreur JavaScript. *Écueils rencontrés* : l'envoi intercepté
+  restait visible des autres scripts (→ arrêt de sa propagation) ; l'événement de fermeture de la modale se déclenche
+  mal en navigation automatisée (→ réaction directe au clic sur les boutons, plus robuste).
+- Un test de bout en bout supposait l'absence de client « KSC seul » ; un client réel de ce profil ayant été créé,
+  le test compte désormais les clients concernés au lieu de présumer la composition du portefeuille.

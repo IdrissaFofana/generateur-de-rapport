@@ -16,7 +16,7 @@
   <td>{{ statut_fichier(e) }}</td>
   <td class="date">{{ e.depose_le | fdatetime }}{% if e.depose_par %}<br><span class="aide">{{ e.depose_par.nom }}</span>{% endif %}</td>
   <td class="fin">{% if utilisateur.peut("operateur") %}
-    <form method="post" action="/exports/{{ e.id }}/supprimer" onsubmit="return confirm('Supprimer {{ e.fichier }} ?')">
+    <form method="post" action="/exports/{{ e.id }}/supprimer" data-confirmer="Supprimer {{ e.fichier }} ?">
       <input type="hidden" name="csrf" value="{{ csrf }}"><button class="bouton petit danger" type="submit">Supprimer</button></form>
   {% endif %}</td>
 </tr>

@@ -39,7 +39,7 @@
   <td class="aide">{{ a.participants | join(", ") or "—" }}</td>
   <td class="date" data-val="{{ a.duree_heures or 0 }}">{{ a.duree_heures | string | replace(".", ",") if a.duree_heures else "—" }}</td>
   <td class="fin">{% if a.cree_par_id == utilisateur.id or utilisateur.peut("validateur") %}
-    <form method="post" action="/activites/{{ a.id }}/supprimer" onsubmit="return confirm('Supprimer cette activité ?')">
+    <form method="post" action="/activites/{{ a.id }}/supprimer" data-confirmer="Supprimer cette activité ?">
       <input type="hidden" name="csrf" value="{{ csrf }}"><button class="bouton petit danger" type="submit">Supprimer</button></form>{% endif %}</td>
 </tr>
 {% else %}<tr><td colspan="6" class="vide">Aucune activité interne en {{ annee }}.</td></tr>{% endfor %}

@@ -75,7 +75,7 @@
     {% if utilisateur.peut("admin") %}
     <div class="en-ligne">
       <a class="bouton petit secondaire" href="/alertes/resume" target="_blank">Aperçu ↗</a>
-      <form method="post" action="/alertes/resume" onsubmit="return confirm('Envoyer le résumé maintenant ?')"><input type="hidden" name="csrf" value="{{ csrf }}">
+      <form method="post" action="/alertes/resume" data-confirmer="Envoyer le résumé maintenant ?"><input type="hidden" name="csrf" value="{{ csrf }}">
         <button class="bouton petit" type="submit">Envoyer maintenant</button></form>
     </div>
     {% endif %}

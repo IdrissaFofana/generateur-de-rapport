@@ -140,8 +140,11 @@ def clients(request: Request, u=Depends(admin), db: SessionDB = Depends(session_
 
 
 @routes.get("/clients/nouveau")
-def nouveau_client(request: Request, u=Depends(admin), db: SessionDB = Depends(session_db)):
-    return page(request, "admin_client.html", u, client=None, tenants=tenants_connus(db))
+def nouveau_client(request: Request, nom: str = "", u=Depends(admin), db: SessionDB = Depends(session_db)):
+    """nom : pré-rempli depuis un rapport importé dont le client n'est pas encore enregistré."""
+    brouillon = Client(nom=nom.strip()[:200], avec_ksc=True, tenants_mdr=[], autres_noms=[], emails_rapports=[],
+                       notes="") if nom.strip() else None
+    return page(request, "admin_client.html", u, client=brouillon, tenants=tenants_connus(db), depuis_import=bool(brouillon))
 
 
 @routes.get("/clients/{cid}")
@@ -161,6 +164,7 @@ def enregistrer_client(request: Request, cid: int | None = None, nom: str = Form
                        tenants_mdr: str = Form(""), notes: str = Form(""), actif: bool = Form(False),
                        code: str = Form(""), emails_rapports: str = Form(""),
                        assistance_mensuelle: bool = Form(False), assistance_depuis: str = Form(""),
+                       autres_noms: str = Form(""),
                        u=Depends(admin), db: SessionDB = Depends(session_db)):
     client = db.get(Client, cid) if cid else Client()
     if cid and client is None:
@@ -169,6 +173,7 @@ def enregistrer_client(request: Request, cid: int | None = None, nom: str = Form
     tenants = [t.strip() for t in re.split(r"[\n,;]", tenants_mdr) if t.strip()]
     code = re.sub(r"[^A-Za-z0-9]", "", code).upper()[:10] or None
     emails = [e.strip() for e in re.split(r"[\n,;\s]", emails_rapports) if e.strip()]
+    alias = list(dict.fromkeys(n.strip() for n in re.split(r"[\n,;]", autres_noms) if n.strip() and n.strip().lower() != nom.lower()))
     erreur = None
     if not nom:
         erreur = "Le nom du client est obligatoire."
@@ -184,14 +189,14 @@ def enregistrer_client(request: Request, cid: int | None = None, nom: str = Form
             erreur = f"Un client « {doublon.nom} » existe déjà."
     if erreur:
         brouillon = Client(id=cid, nom=nom, avec_mdr=avec_mdr, avec_ksc=avec_ksc, suggerer_mdr=suggerer_mdr,
-                           tenants_mdr=tenants, notes=notes, actif=actif, code=code, emails_rapports=emails)
+                           tenants_mdr=tenants, notes=notes, actif=actif, code=code, emails_rapports=emails, autres_noms=alias)
         return page(request, "admin_client.html", u, client=brouillon, tenants=tenants_connus(db), erreur=erreur)
 
     client.nom, client.avec_mdr, client.avec_ksc = nom, avec_mdr, avec_ksc
     client.suggerer_mdr = suggerer_mdr and not avec_mdr
     client.tenants_mdr = tenants if avec_mdr else []
     client.notes, client.actif = notes.strip(), actif if cid else True
-    client.code, client.emails_rapports = code, emails
+    client.code, client.emails_rapports, client.autres_noms = code, emails, alias
     client.assistance_mensuelle = assistance_mensuelle
     try:
         client.assistance_depuis = date.fromisoformat(assistance_depuis) if assistance_depuis else (
@@ -201,8 +206,17 @@ def enregistrer_client(request: Request, cid: int | None = None, nom: str = Form
     if not cid:
         db.add(client)
     journaliser(db, u, "modification client" if cid else "création client", f"{nom} ({client.profil})")
+    db.flush()
+    # Un nouveau client (ou un nouvel « autre nom ») peut débloquer des rapports importés en attente
+    from .. import interventions as mi
+    resolus, doublons = mi.reessayer_attentes(db, u)
+    for i in resolus:
+        journaliser(db, u, "import intervention", f"{i.numero} depuis « {i.nom_fichier_source} » (client reconnu après enregistrement)")
     db.commit()
-    flash(request, f"Client {nom} enregistré.")
+    flash(request, f"Client {nom} enregistré." + (f" {len(resolus)} rapport(s) importé(s) en attente lui ont été rattachés, "
+                                                  "à vérifier dans Interventions → Importer." if resolus else "")
+          + (f" {len(doublons)} autre(s) ressemblent à une intervention existante : à trancher dans Interventions → Importer."
+             if doublons else ""))
     return rediriger("/admin/clients")
 
 

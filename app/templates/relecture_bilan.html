@@ -24,12 +24,12 @@
       <a class="bouton" href="/rapports/{{ r.id }}/pdf">Télécharger le PDF</a>
     {% else %}
       {% if utilisateur.peut("operateur") %}
-      <form method="post" action="/rapports/{{ r.id }}/actualiser" onsubmit="return confirm('Recalculer le bilan à partir des rapports mensuels validés ? Vos textes sont conservés.')">
+      <form method="post" action="/rapports/{{ r.id }}/actualiser" data-confirmer="Recalculer le bilan à partir des rapports mensuels validés ? Vos textes sont conservés.">
         <input type="hidden" name="csrf" value="{{ csrf }}"><button class="bouton secondaire" type="submit">Actualiser les chiffres</button></form>
       {% endif %}
       {% if modifiable %}
       <form method="post" action="/rapports/{{ r.id }}/valider"
-            onsubmit="return confirm('Valider ce bilan ? Le PDF définitif sera généré et le bilan ne pourra plus être modifié (une nouvelle version restera possible).')">
+            data-confirmer="Valider ce bilan ? Le PDF définitif sera généré et le bilan ne pourra plus être modifié (une nouvelle version restera possible).">
         <input type="hidden" name="csrf" value="{{ csrf }}"><button class="bouton valider" type="submit">Valider le bilan</button></form>
       {% endif %}
     {% endif %}
@@ -101,7 +101,7 @@
 
 {% if r.statut == "brouillon" and utilisateur.peut("validateur") %}
 <form method="post" action="/rapports/{{ r.id }}/actualiser" style="margin-top:10px"
-      onsubmit="return confirm('Régénérer tous les textes à partir des chiffres ? Vos modifications seront perdues.')">
+      data-confirmer="Régénérer tous les textes à partir des chiffres ? Vos modifications seront perdues.">
   <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="reinitialiser" value="1">
   <button class="bouton petit danger" type="submit">Réinitialiser tous les textes</button>
 </form>

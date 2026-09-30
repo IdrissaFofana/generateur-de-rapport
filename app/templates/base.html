@@ -107,5 +107,59 @@ document.querySelectorAll(".depot").forEach(function (zone) {
   ["dragleave", "drop"].forEach(function (e) { zone.addEventListener(e, function () { zone.classList.remove("survol"); }); });
 });
 </script>
+
+<dialog id="modale-confirmation" class="modale" aria-labelledby="modale-titre" aria-describedby="modale-message">
+  <form method="dialog">
+    <div class="modale-tete"><span class="modale-icone" aria-hidden="true"></span><h2 id="modale-titre">Confirmation</h2></div>
+    <p id="modale-message"></p>
+    <div class="modale-actions">
+      <button class="bouton secondaire" type="button" id="modale-non">Annuler</button>
+      <button class="bouton" type="button" id="modale-oui">Confirmer</button>
+    </div>
+  </form>
+</dialog>
+<script>
+/* Confirmation avant une action : attribut data-confirmer="message" sur un formulaire ou sur un bouton d'envoi
+   (data-confirmer-libelle : texte du bouton de confirmation). Remplace la boîte native du navigateur. */
+(function () {
+  var modale = document.getElementById("modale-confirmation");
+  if (!modale || !modale.showModal) return;
+  var VERBES = ["Supprimer", "Retirer", "Valider", "Générer", "Créer", "Envoyer", "Réinitialiser", "Rouvrir", "Recalculer",
+                "Régénérer", "Confirmer"];
+  var DANGER = /^(Supprimer|Retirer|Annuler|Régénérer|Réinitialiser)/;
+  var enAttente = null;
+  document.addEventListener("submit", function (e) {
+    var form = e.target, bouton = e.submitter;
+    var source = bouton && bouton.dataset.confirmer ? bouton : (form.dataset.confirmer ? form : null);
+    if (!source || form.dataset.confirme === "1") { delete form.dataset.confirme; return; }
+    e.preventDefault();
+    e.stopImmediatePropagation();  /* aucun autre script ne doit traiter cet envoi tant qu'il n'est pas confirmé */
+    var message = source.dataset.confirmer;
+    var premier = message.split(" ")[0];
+    var danger = DANGER.test(message);
+    document.getElementById("modale-message").textContent = message;
+    document.getElementById("modale-titre").textContent = danger ? "Action irréversible" : "Confirmation";
+    var oui = document.getElementById("modale-oui");
+    oui.textContent = source.dataset.confirmerLibelle || (VERBES.indexOf(premier) >= 0 ? premier : "Confirmer");
+    oui.className = "bouton" + (danger ? " danger-plein" : "");
+    modale.classList.toggle("danger", danger);
+    enAttente = { form: form, bouton: bouton };
+    modale.showModal();
+    (danger ? document.getElementById("modale-non") : oui).focus();  /* action destructrice : focus sur « Annuler » */
+  }, true);
+  function fermer() { enAttente = null; modale.close(); }
+  document.getElementById("modale-oui").addEventListener("click", function (e) {
+    e.preventDefault();
+    var a = enAttente; fermer();
+    if (!a) return;
+    a.form.dataset.confirme = "1";
+    if (a.form.requestSubmit) { a.bouton ? a.form.requestSubmit(a.bouton) : a.form.requestSubmit(); }
+    else { a.form.submit(); }
+  });
+  document.getElementById("modale-non").addEventListener("click", function (e) { e.preventDefault(); fermer(); });
+  modale.addEventListener("cancel", function () { enAttente = null; });                  /* touche Échap */
+  modale.addEventListener("click", function (e) { if (e.target === modale) fermer(); });  /* clic hors de la fenêtre */
+})();
+</script>
 </body>
 </html>

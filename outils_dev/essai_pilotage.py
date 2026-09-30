@@ -179,7 +179,11 @@ def main():
         filtre = admin.get(f"/?annee=2026&mois=9&client={hudson.id}").text
         verifier("vue filtrée" in filtre and "1 client(s) sur 1" in filtre, "filtre par client")
         filtre = admin.get("/?annee=2026&mois=9&profil=ksc").text
-        verifier("Aucun client ne correspond à ces filtres" in filtre, "filtre par profil (aucun client « KSC seul »)")
+        with Session() as db:  # dépend du portefeuille réel : compter les clients « KSC seul » actifs
+            nb_ksc = db.scalar(select(func.count()).select_from(Client).where(
+                Client.actif.is_(True), Client.avec_ksc.is_(True), Client.avec_mdr.is_(False)))
+        verifier(("Aucun client ne correspond à ces filtres" in filtre) if nb_ksc == 0 else f"client(s) sur {nb_ksc}\n" in filtre,
+                 f"filtre par profil « KSC seul » ({nb_ksc} client(s))")
         filtre = admin.get("/?annee=2026&mois=9&profil=mdr-ksc").text
         verifier("Clients les plus exposés" in filtre, "filtre par profil « MDR + KSC »")
         page = admin.get(f"/clients/{hudson.id}/parc?annee=2026&mois=9").text
