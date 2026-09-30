@@ -3,7 +3,7 @@ import csv
 import io
 import re
 import secrets
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session as SessionDB
 
 from ..db import session_db
-from .. import config, parc
+from .. import config, integrite, parc
 from ..modeles import PRODUITS, ROLES, Client, Contrat, Hebdo, Journal, Utilisateur, journaliser
 from ..securite import exiger, hacher, verifier_csrf
 from .commun import flash, page, rediriger
@@ -39,7 +39,7 @@ def tenants_connus(db):
 @routes.get("/utilisateurs")
 def utilisateurs(request: Request, u=Depends(admin), db: SessionDB = Depends(session_db)):
     liste = db.scalars(select(Utilisateur).order_by(Utilisateur.actif.desc(), Utilisateur.nom)).all()
-    return page(request, "admin_utilisateurs.html", u, liste=liste)
+    return page(request, "admin_utilisateurs.html", u, liste=liste, maintenant=datetime.now())
 
 
 @routes.post("/utilisateurs", dependencies=[Depends(verifier_csrf)])
@@ -80,6 +80,8 @@ def modifier_utilisateur(request: Request, uid: int, nom: str = Form(...), role:
     if (role != "admin" or not actif) and _dernier_admin(db, cible):
         flash(request, "Impossible : ce compte est le dernier administrateur actif.", "erreur")
         return rediriger("/admin/utilisateurs")
+    if cible.actif and not actif or cible.role != role:
+        cible.version_session += 1  # désactivation ou changement de rôle : sessions fermées
     cible.nom, cible.role, cible.actif = nom.strip(), role, actif
     journaliser(db, u, "modification utilisateur", f"{cible.email} : {ROLES[role]}, {'actif' if actif else 'désactivé'}")
     db.commit()
@@ -94,9 +96,37 @@ def reinitialiser(request: Request, uid: int, u=Depends(admin), db: SessionDB = 
         raise HTTPException(404)
     mdp = mot_de_passe_provisoire()
     cible.mot_de_passe, cible.doit_changer_mdp = hacher(mdp), True
-    journaliser(db, u, "réinitialisation mot de passe", cible.email)
+    cible.echecs_connexion, cible.bloque_jusqua = 0, None
+    cible.version_session += 1  # ses sessions ouvertes sont fermées
+    journaliser(db, u, "réinitialisation mot de passe", f"{cible.email} (sessions fermées, compte déverrouillé)")
     db.commit()
     flash(request, f"Nouveau mot de passe provisoire pour {cible.email} : {mdp}", "info")
+    return rediriger("/admin/utilisateurs")
+
+
+@routes.post("/utilisateurs/{uid}/deverrouiller", dependencies=[Depends(verifier_csrf)])
+def deverrouiller(request: Request, uid: int, u=Depends(admin), db: SessionDB = Depends(session_db)):
+    cible = db.get(Utilisateur, uid)
+    if cible is None:
+        raise HTTPException(404)
+    cible.echecs_connexion, cible.bloque_jusqua = 0, None
+    journaliser(db, u, "déverrouillage compte", cible.email)
+    db.commit()
+    flash(request, f"Compte {cible.email} déverrouillé.")
+    return rediriger("/admin/utilisateurs")
+
+
+@routes.post("/utilisateurs/{uid}/reinitialiser-2fa", dependencies=[Depends(verifier_csrf)])
+def reinitialiser_2fa(request: Request, uid: int, u=Depends(admin), db: SessionDB = Depends(session_db)):
+    """Téléphone perdu : l'utilisateur devra réactiver la double authentification."""
+    cible = db.get(Utilisateur, uid)
+    if cible is None:
+        raise HTTPException(404)
+    cible.totp_secret, cible.totp_actif, cible.totp_dernier_pas = None, False, None
+    cible.version_session += 1
+    journaliser(db, u, "réinitialisation double authentification", f"{cible.email} (sessions fermées)")
+    db.commit()
+    flash(request, f"Double authentification de {cible.email} réinitialisée.", "info")
     return rediriger("/admin/utilisateurs")
 
 
@@ -130,6 +160,7 @@ def enregistrer_client(request: Request, cid: int | None = None, nom: str = Form
                        avec_mdr: bool = Form(False), avec_ksc: bool = Form(False), suggerer_mdr: bool = Form(False),
                        tenants_mdr: str = Form(""), notes: str = Form(""), actif: bool = Form(False),
                        code: str = Form(""), emails_rapports: str = Form(""),
+                       assistance_mensuelle: bool = Form(False), assistance_depuis: str = Form(""),
                        u=Depends(admin), db: SessionDB = Depends(session_db)):
     client = db.get(Client, cid) if cid else Client()
     if cid and client is None:
@@ -161,6 +192,12 @@ def enregistrer_client(request: Request, cid: int | None = None, nom: str = Form
     client.tenants_mdr = tenants if avec_mdr else []
     client.notes, client.actif = notes.strip(), actif if cid else True
     client.code, client.emails_rapports = code, emails
+    client.assistance_mensuelle = assistance_mensuelle
+    try:
+        client.assistance_depuis = date.fromisoformat(assistance_depuis) if assistance_depuis else (
+            client.assistance_depuis or (date.today().replace(day=1) if assistance_mensuelle else None))
+    except ValueError:
+        client.assistance_depuis = None
     if not cid:
         db.add(client)
     journaliser(db, u, "modification client" if cid else "création client", f"{nom} ({client.profil})")
@@ -215,6 +252,7 @@ def journal(request: Request, page_: int = Query(1, alias="page"), u=Depends(adm
                         .offset((page_ - 1) * PAR_PAGE).limit(PAR_PAGE)).all()
     params = {k: (v.isoformat() if isinstance(v, date) else v) for k, v in f.items() if v}
     return page(request, "admin_journal.html", u, lignes=lignes, f=f, total=total, page_=page_, pages=pages,
+                integrite=integrite.verifier(db),
                 params=urlencode(params), utilisateurs=db.scalars(select(Utilisateur).order_by(Utilisateur.nom)).all(),
                 actions=db.scalars(select(Journal.action).distinct().order_by(Journal.action)).all())
 
@@ -227,6 +265,6 @@ def journal_csv(request: Request, u=Depends(admin), db: SessionDB = Depends(sess
     ecrivain.writerow(["Date", "Utilisateur", "E-mail", "Action", "Détail"])
     for l in db.scalars(_requete(_filtres(request)).order_by(Journal.quand.desc(), Journal.id.desc())):
         ecrivain.writerow([l.quand.strftime("%d/%m/%Y %H:%M:%S"), l.utilisateur.nom if l.utilisateur else "",
-                           l.utilisateur.email if l.utilisateur else "", l.action, l.detail])
+                           l.acteur, l.action, l.detail])
     return Response("\ufeff" + sortie.getvalue(), media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": f'attachment; filename="journal-{date.today():%Y-%m-%d}.csv"'})

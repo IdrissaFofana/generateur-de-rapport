@@ -5,6 +5,7 @@
     python gerer.py importer-clients <config.json>         importe les clients du générateur en ligne de commande
     python gerer.py alertes                                évalue les alertes et envoie les notifications (tâche quotidienne)
     python gerer.py resume-hebdo [--forcer]                envoie le résumé hebdomadaire (une fois par semaine)
+    python gerer.py verifier-journal                       vérifie la chaîne d'empreintes du journal d'audit
 """
 import json
 import sys
@@ -72,9 +73,20 @@ def resume_hebdo(*options):
         sys.exit(1)
 
 
+def verifier_journal():
+    from app import integrite
+    with Session() as db:
+        r = integrite.verifier(db)
+    if r["ok"]:
+        print(f"Journal intact : {r['lignes']} lignes. Ancre (empreinte de la dernière ligne) : {r['ancre']}")
+    else:
+        print(f"INTÉGRITÉ ROMPUE à la ligne {r['rupture']['id']} : {r['rupture']['raison']}")
+        sys.exit(2)
+
+
 if __name__ == "__main__":
     commandes = {"init": init, "creer-admin": creer_admin, "importer-clients": importer_clients,
-                 "alertes": evaluer_alertes, "resume-hebdo": resume_hebdo}
+                 "alertes": evaluer_alertes, "resume-hebdo": resume_hebdo, "verifier-journal": verifier_journal}
     if len(sys.argv) < 2 or sys.argv[1] not in commandes:
         sys.exit(__doc__)
     commandes[sys.argv[1]](*sys.argv[2:])

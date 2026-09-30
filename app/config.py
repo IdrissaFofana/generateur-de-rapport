@@ -55,3 +55,11 @@ SEUIL_HAUSSE_DETECTIONS = int(os.environ.get("SEUIL_HAUSSE_DETECTIONS_PCT", "50"
 SEUIL_SOUS_UTILISATION = int(os.environ.get("SEUIL_SOUS_UTILISATION_PCT", "70"))
 # Engagement interne : rapport mensuel validé au plus tard N jours après la fin du mois
 ENGAGEMENT_DELAI_JOURS = int(os.environ.get("ENGAGEMENT_DELAI_JOURS", "10"))
+
+# Authentification : verrouillage d'un compte après N échecs consécutifs, limitation par adresse IP
+VERROUILLAGE_ECHECS = int(os.environ.get("VERROUILLAGE_ECHECS", "5"))
+VERROUILLAGE_MINUTES = int(os.environ.get("VERROUILLAGE_MINUTES", "15"))
+LIMITE_ECHECS_IP = int(os.environ.get("LIMITE_ECHECS_IP", "20"))
+FENETRE_ECHECS_IP_MINUTES = int(os.environ.get("FENETRE_ECHECS_IP_MINUTES", "15"))
+# Rôles pour lesquels la double authentification est obligatoire (ex. "admin,validateur") ; vide = facultative
+EXIGER_2FA_ROLES = _liste("EXIGER_2FA_ROLES")

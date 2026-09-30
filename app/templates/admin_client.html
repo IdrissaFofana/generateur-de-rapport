@@ -32,6 +32,11 @@
       <span>Proposer le service MDR dans le rapport quand la situation le justifie <span class="aide">(clients sans MDR uniquement)</span></span></label>
   </div>
 
+  <label class="case" style="margin-top:14px"><input type="checkbox" name="assistance_mensuelle" value="true" {{ 'checked' if client and client.assistance_mensuelle }}>
+    <span><strong>Assistance mensuelle</strong><br><span class="aide">Au moins une assistance par mois : elle est planifiée automatiquement chaque mois
+    (menu Assistances) et une alerte est émise si elle n'est pas réalisée.</span>
+    <span class="en-ligne" style="margin-top:8px"><span class="aide">Depuis le</span>
+      <input type="date" name="assistance_depuis" value="{{ client.assistance_depuis.isoformat() if client and client.assistance_depuis else '' }}" style="width:auto"></span></span></label>
   <div class="grille" style="margin-top:18px;grid-template-columns: 180px minmax(0, 1fr)">
     <div class="champ"><label for="code">Code client <span class="aide">— numéros RI</span></label>
       <input type="text" id="code" name="code" maxlength="10" value="{{ client.code or '' if client else '' }}"

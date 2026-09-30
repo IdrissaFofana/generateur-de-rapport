@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Rapport d'activité du service technique — {{ d.libelle }}</title>
+<style>
+{{ css | safe }}
+@page { @bottom-center { content: "Rapport d'activité du service technique — {{ presta.nom }} · Diffusion interne     ·     Page " counter(page) " / " counter(pages); } }
+.entete img.partenaire { height: 0.95cm; }
+.tuiles .tuile .valeur small { font-size: 11pt; color: var(--encre-douce); }
+table.donnees td.c, table.donnees th.c { text-align: center; }
+.liste-faits li { margin: 3pt 0; }
+.jauge { display: inline-block; width: 60pt; height: 6pt; background: var(--filet); vertical-align: middle; margin-right: 5pt; }
+.jauge i { display: block; height: 100%; background: var(--bon); }
+.jauge.faible i { background: var(--modere); }
+</style>
+</head>
+<body>
+{% set c_ = d.chiffres %}
+{% set n = namespace(v=0) %}
+{% macro titre(id, texte) %}{% set n.v = n.v + 1 %}<h1 id="{{ id }}">{{ n.v }}. {{ texte }}</h1>{% endmacro %}
+
+<div class="entete">
+  <img src="logo.png" alt="{{ presta.nom }}">
+  <div class="droite">Rapport d'activité du service technique<br>{{ d.libelle }}</div>
+</div>
+
+{# ===================================================== Page de garde #}
+<section class="couverture">
+  <img class="logo" src="logo.png" alt="{{ presta.nom }}">
+  <div class="bande">
+    <div class="t1">RAPPORT D'ACTIVITÉ</div>
+    <div class="t2">SERVICE TECHNIQUE</div>
+    <div class="t3">{{ presta.nom_complet }} &nbsp;·&nbsp; {{ d.libelle }}</div>
+  </div>
+  <table class="infos">
+    <tr><td>Période</td><td>Du {{ d.debut | fdate }} au {{ d.fin_incluse | fdate }}</td></tr>
+    <tr><td>Type</td><td>Rapport {{ d.periodicite }}</td></tr>
+    <tr><td>Date du rapport</td><td>{{ date_rapport | fdate }}</td></tr>
+    <tr><td>Établi par</td><td>{{ presta.signataire }}</td></tr>
+    <tr><td>Sources</td><td>Rapports d'intervention validés, planning des assistances, fiches des techniciens, activités internes</td></tr>
+  </table>
+  <p class="confidentiel">Document interne — diffusion restreinte à la direction et au service technique.</p>
+</section>
+
+{# ===================================================== Sommaire #}
+<section class="sommaire">
+  <div class="titre-sommaire">Sommaire</div>
+  <ul>
+    {% for id, t in [("synthese", "Synthèse"), ("indicateurs", "Indicateurs clés"), ("assistances", "Assistances mensuelles"),
+                     ("clients", "Activité par client"), ("techniciens", "Activité par technicien"), ("faits", "Faits marquants : déploiements, migrations, audits"),
+                     ("incidents", "Incidents traités"), ("recurrents", "Problèmes récurrents"), ("competences", "Formations et certifications"),
+                     ("internes", "Activités internes"), ("perspectives", "Perspectives"), ("conclusion", "Conclusion")] %}
+    <li class="n1"><a href="#{{ id }}">{{ loop.index }}. {{ t }}</a></li>{% endfor %}
+  </ul>
+</section>
+
+{{ titre("synthese", "Synthèse") }}
+{{ c.synthese | md }}
+<div class="tuiles">
+  <div class="tuile"><div class="valeur">{{ c_.interventions }}</div><div class="libelle">interventions</div></div>
+  <div class="tuile"><div class="valeur">{{ c_.heures | virgule }}</div><div class="libelle">heures de présence</div></div>
+  <div class="tuile"><div class="valeur">{{ c_.clients }}</div><div class="libelle">clients accompagnés</div></div>
+  <div class="tuile k-{{ 'bon' if (c_.taux_assistance or 0) >= 100 else 'modere' }}"><div class="valeur">{{ c_.taux_assistance if c_.taux_assistance is not none else "—" }}{{ " %" if c_.taux_assistance is not none }}</div><div class="libelle">assistances mensuelles assurées</div></div>
+  <div class="tuile"><div class="valeur">{{ c_.certifications_obtenues }}</div><div class="libelle">certifications obtenues</div></div>
+</div>
+
+{{ titre("indicateurs", "Indicateurs clés") }}
+<table class="donnees">
+<thead><tr><th>Indicateur</th><th class="c">Valeur</th></tr></thead>
+<tbody>
+<tr><td>Interventions validées</td><td class="c">{{ c_.interventions }}{% if c_.importees %} (dont {{ c_.importees }} importées){% endif %}</td></tr>
+<tr><td>Heures de présence{% if c_.sans_heures %} ({{ c_.sans_heures }} intervention(s) sans heures renseignées){% endif %}</td><td class="c">{{ c_.heures | virgule }}</td></tr>
+<tr><td>Interventions sur site / à distance</td><td class="c">{{ c_.sur_site }} / {{ c_.interventions - c_.sur_site }}</td></tr>
+<tr><td>Points bloquants relevés</td><td class="c">{{ c_.points_bloquants }}</td></tr>
+<tr><td>Assistances mensuelles dues / réalisées / reportées</td><td class="c">{{ c_.assistances_dues }} / {{ c_.assistances_realisees }} / {{ c_.assistances_reportees }}</td></tr>
+<tr><td>Rapports mensuels de sécurité validés (délai moyen)</td><td class="c">{{ c_.rapports_securite }}{% if c_.delai_moyen is not none %} (J+{{ c_.delai_moyen | virgule }}){% endif %}</td></tr>
+<tr><td>Certifications valides dans l'équipe</td><td class="c">{{ c_.certifications_valides }}</td></tr>
+<tr><td>Activités internes (heures)</td><td class="c">{{ c_.activites_internes }} ({{ c_.heures_internes | virgule }} h)</td></tr>
+</tbody></table>
+{% if graphiques.mois %}<figure>{{ graphiques.mois | safe }}<figcaption>Interventions par mois</figcaption></figure>{% endif %}
+{% if graphiques.types %}<figure class="etroit">{{ graphiques.types | safe }}<figcaption>Interventions par type</figcaption></figure>{% endif %}
+
+{{ titre("assistances", "Assistances mensuelles") }}
+{% if c_.assistances_dues or c_.assistances_reportees %}
+<p>Chaque client sous contrat d'assistance mensuelle doit recevoir au moins une assistance par mois.
+Sur la période : <strong>{{ c_.assistances_realisees }}</strong> réalisée(s) sur <strong>{{ c_.assistances_dues }}</strong> due(s)
+{% if c_.assistances_reportees %}, {{ c_.assistances_reportees }} reportée(s) avec justification{% endif %}
+{% if c_.assistances_retard %}, <strong>{{ c_.assistances_retard }} en retard</strong>{% endif %}.</p>
+{% set sous_contrat = d.clients | selectattr("dues") | list %}
+{% if sous_contrat %}
+<table class="donnees">
+<thead><tr><th>Client</th><th class="c">Dues</th><th class="c">Réalisées</th><th>Conformité</th></tr></thead>
+<tbody>{% for l in sous_contrat %}<tr><td>{{ l.nom }}</td><td class="c">{{ l.dues }}</td><td class="c">{{ l.faites }}</td>
+<td><span class="jauge {{ 'faible' if (l.conformite or 0) < 100 }}"><i style="width:{{ [l.conformite or 0, 100] | min }}%"></i></span>{{ l.conformite }} %</td></tr>{% endfor %}</tbody>
+</table>{% endif %}
+{% else %}<p>Aucun client sous contrat d'assistance mensuelle sur la période.</p>{% endif %}
+
+{{ titre("clients", "Activité par client") }}
+{% if d.clients %}
+<table class="donnees">
+<thead><tr><th>Client</th><th class="c">Interventions</th><th class="c">Heures</th><th>Types</th><th class="c">Points bloquants</th><th>Dernière intervention</th></tr></thead>
+<tbody>{% for l in d.clients %}<tr><td><strong>{{ l.nom }}</strong></td><td class="c">{{ l.interventions }}</td><td class="c">{{ l.heures | virgule }}</td>
+<td>{% for t, k in l.types.items() %}{{ t }} {{ k }}{{ ", " if not loop.last }}{% endfor %}</td><td class="c">{{ l.points }}</td>
+<td class="nobr">{{ l.derniere | fdate_courte if l.derniere else "—" }}</td></tr>{% endfor %}</tbody>
+</table>
+{% else %}<p>Aucune intervention validée sur la période.</p>{% endif %}
+
+{{ titre("techniciens", "Activité par technicien") }}
+<table class="donnees">
+<thead><tr><th>Technicien</th><th class="c">Interventions</th><th class="c">Heures</th><th class="c">Clients</th><th class="c">Formations</th><th class="c">Certifications obtenues</th></tr></thead>
+<tbody>{% for t in d.techniciens %}<tr><td><strong>{{ t.nom }}</strong><span class="justif">{{ t.role }}</span></td><td class="c">{{ t.interventions }}</td>
+<td class="c">{{ t.heures | virgule }}</td><td class="c">{{ t.clients }}</td><td class="c">{{ t.formations }}</td><td class="c">{{ t.certifications }}</td></tr>
+{% else %}<tr><td colspan="6">Aucun technicien actif.</td></tr>{% endfor %}</tbody>
+</table>
+
+{{ titre("faits", "Faits marquants : déploiements, migrations, audits") }}
+{% if c.faits_marquants %}<ul class="puces liste-faits">{% for f in c.faits_marquants %}<li>{{ f | md_ligne }}</li>{% endfor %}</ul>
+{% else %}<p>Aucun déploiement, migration ou audit sur la période.</p>{% endif %}
+
+{{ titre("incidents", "Incidents traités") }}
+{% if d.incidents %}
+<table class="donnees"><thead><tr><th>N°</th><th>Client</th><th>Date</th><th>Objet</th><th>Statut</th></tr></thead>
+<tbody>{% for i in d.incidents %}<tr><td class="nobr">{{ i.numero }}</td><td>{{ i.client }}</td><td class="nobr">{{ i.date | fdate_courte }}</td><td>{{ i.objet }}</td><td>{{ i.statut | statut }}</td></tr>{% endfor %}</tbody></table>
+{% else %}<p>Aucune intervention sur incident sur la période.</p>{% endif %}
+
+{{ titre("recurrents", "Problèmes récurrents") }}
+{% if d.recurrents %}
+<p>Points bloquants rencontrés chez plusieurs clients : ils justifient une procédure standard ou une recommandation générale.</p>
+<table class="donnees"><thead><tr><th>Problème</th><th>Clients</th><th class="c">Occurrences</th><th>Action appliquée</th></tr></thead>
+<tbody>{% for p in d.recurrents %}<tr><td><strong>{{ p.probleme }}</strong></td><td>{{ p.clients | join(", ") }}</td><td class="c">{{ p.occurrences }}</td><td>{{ p.action or "—" }}</td></tr>{% endfor %}</tbody></table>
+{% else %}<p>Aucun problème rencontré chez plusieurs clients sur la période.</p>{% endif %}
+
+{{ titre("competences", "Formations et certifications") }}
+<p><strong>{{ c_.certifications_obtenues }}</strong> certification(s) obtenue(s) sur la période ;
+<strong>{{ c_.certifications_valides }}</strong> certification(s) valide(s) dans l'équipe
+{%- if d.certifications_par_editeur %} ({% for e, k in d.certifications_par_editeur.items() %}{{ e }} : {{ k }}{{ ", " if not loop.last }}{% endfor %}){% endif %}.</p>
+{% if d.certifications_obtenues %}
+<table class="donnees"><thead><tr><th>Technicien</th><th>Certification</th><th>Éditeur</th><th>Obtenue le</th><th>Validité</th></tr></thead>
+<tbody>{% for x in d.certifications_obtenues %}<tr><td>{{ x.technicien }}</td><td><strong>{{ x.intitule }}</strong></td><td>{{ x.editeur }}</td>
+<td class="nobr">{{ x.obtenue_le | fdate_courte }}</td><td class="nobr">{{ ("jusqu'au " ~ (x.expire_le | fdate_courte)) if x.expire_le else "sans expiration" }}</td></tr>{% endfor %}</tbody></table>{% endif %}
+{% if d.formations %}
+<table class="donnees"><thead><tr><th>Technicien</th><th>Formation</th><th>Organisme</th><th>Statut</th><th class="c">Heures</th></tr></thead>
+<tbody>{% for f in d.formations %}<tr><td>{{ f.technicien }}</td><td><strong>{{ f.intitule }}</strong></td><td>{{ f.organisme or "—" }}</td><td>{{ f.statut }}</td><td class="c">{{ f.heures or "—" }}</td></tr>{% endfor %}</tbody></table>{% endif %}
+{% if d.certifications_a_renouveler %}
+<div class="encadre k-modere"><div class="titre">Certifications à renouveler dans les 90 jours</div>
+<ul>{% for x in d.certifications_a_renouveler %}<li>{{ x.technicien }} — {{ x.intitule }} (expire le {{ x.expire_le | fdate_courte }})</li>{% endfor %}</ul></div>{% endif %}
+
+{{ titre("internes", "Activités internes") }}
+{% if d.activites %}
+<table class="donnees"><thead><tr><th>Date</th><th>Type</th><th>Activité</th><th>Participants</th><th class="c">Heures</th></tr></thead>
+<tbody>{% for a in d.activites %}<tr><td class="nobr">{{ a.date | fdate_courte }}</td><td>{{ a.type }}</td><td><strong>{{ a.titre }}</strong>{% if a.description %}<span class="justif">{{ a.description }}</span>{% endif %}</td>
+<td>{{ a.participants | join(", ") or "—" }}</td><td class="c">{{ a.duree | virgule if a.duree else "—" }}</td></tr>{% endfor %}</tbody></table>
+{% else %}<p>Aucune activité interne enregistrée sur la période.</p>{% endif %}
+
+{{ titre("perspectives", "Perspectives") }}
+<ul class="puces">{% for p in c.perspectives %}<li>{{ p | md_ligne }}</li>{% endfor %}</ul>
+
+{{ titre("conclusion", "Conclusion") }}
+{{ c.conclusion | md }}
+<div class="signature">
+  <div class="nom">{{ presta.signataire }}</div>
+  <div class="societe">{{ presta.nom_complet }}</div>
+</div>
+</body>
+</html>

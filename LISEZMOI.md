@@ -26,6 +26,16 @@ Cycle d'un rapport : **Incomplet → Partiel / Prêt → Brouillon → Validé**
   l'hebdo ne peut pas encore être paru sont affichés « à venir » et ne rendent pas le client « Partiel ».
   Passé ce délai (lundi suivant + 3 jours), ils redeviennent manquants.
 
+### Sécurité des comptes
+
+- **Double authentification** (Mon compte) : code à 6 chiffres d'une application d'authentification (TOTP).
+  Obligatoire pour certains rôles avec EXIGER_2FA_ROLES. Téléphone perdu : Administration → Utilisateurs →
+  « Réinit. 2FA ».
+- Après 5 échecs de connexion, le compte est verrouillé 15 minutes (déverrouillage possible par un administrateur).
+- Changer de mot de passe ferme les sessions ouvertes ailleurs.
+- **Journal infalsifiable** : chaque ligne est chaînée à la précédente (SHA-256). Vérification : page Journal ou
+  `python gerer.py verifier-journal`. Ne jamais supprimer de lignes du journal : la chaîne serait rompue.
+
 ### Pages de la plateforme
 
 | Menu | Rôle |
@@ -57,6 +67,21 @@ l'intervention. **Dupliquer** crée la suite d'une intervention (objet, contexte
 L'historique complet d'un client est dans sa fiche → **Interventions** (chronologie).
 La **bibliothèque** (105 actions et recommandations de départ, terminologie Kaspersky) se gère depuis
 Interventions → Bibliothèque d'actions : ajout par tous, modification et suppression par les validateurs.
+
+### Service technique (menu **Service technique**)
+
+- **Assistances** : cocher « Assistance mensuelle » dans la fiche d'un client (Administration → Clients). Chaque mois,
+  une assistance « à planifier » est créée ; on lui donne une date et un technicien, puis « Rédiger le rapport ». Elle
+  devient « Réalisée » dès qu'un rapport d'intervention validé du mois la couvre (type assistance ou maintenance).
+  Un validateur peut la **reporter** avec justification. Classements des clients et des techniciens (mois, trimestre,
+  année), triables par colonne. Alerte si l'assistance du mois n'est pas faite à partir du 20.
+- **Techniciens** : chaque utilisateur complète sa fiche (formations, certifications avec justificatif PDF ou image).
+  Alerte 60 jours avant l'expiration d'une certification.
+- **Activités internes** : projets internes, webinaires, réunions, veille.
+- **Connaissances** : recherche dans toutes les interventions ; problèmes rencontrés chez plusieurs clients.
+- **Rapport du service** : rapport d'activité mensuel, trimestriel, semestriel ou annuel, calculé puis relu et validé.
+- **Import** (Interventions → Importer d'anciens rapports) : PDF ou Word ; les champs sont extraits puis vérifiés
+  avant confirmation ; le fichier d'origine reste la référence.
 
 ### Suivi du parc (fiche client → **Suivi du parc**)
 
@@ -140,6 +165,9 @@ python -m outils_dev.essai_rapports    # brouillon, relecture, validation, versi
 python -m outils_dev.essai_bilans      # fin de mois, actions groupées, évolution, bilans, journal
 python -m outils_dev.essai_pilotage    # vue d'ensemble, parc, contrats, alertes, notifications (simulées), résumé
 python -m outils_dev.essai_interventions  # rapports d'intervention, bibliothèque, PDF, envoi, historique
+python -m outils_dev.essai_securite    # verrouillage, double authentification, sessions, journal chaîné
+python -m outils_dev.essai_service     # assistances, techniciens, import, connaissances, rapport du service
+python -m pytest                        # tests unitaires (pip install -r requirements-dev.txt)
 ```
 
 ## Évolution de la base (migrations Alembic)

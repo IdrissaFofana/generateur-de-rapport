@@ -9,7 +9,7 @@ from sqlalchemy import delete, select
 
 from app.db import Session
 from app.main import app
-from app.modeles import Client, Journal, Utilisateur
+from app.modeles import Client, Utilisateur
 from app.securite import hacher
 
 PREFIXE = "essai.socle"
@@ -86,7 +86,6 @@ def main():
     finally:
         with Session() as db:
             ids = db.scalars(select(Utilisateur.id).where(Utilisateur.email.like(f"{PREFIXE}%"))).all()
-            db.execute(delete(Journal).where(Journal.utilisateur_id.in_(ids)))
             db.execute(delete(Utilisateur).where(Utilisateur.id.in_(ids)))
             db.execute(delete(Client).where(Client.nom.like("ESSAI%")))
             db.commit()

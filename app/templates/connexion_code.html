@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block titre %}Code de vérification{% endblock %}
+{% block corps %}
+<div class="connexion">
+  <section class="scene">
+    <img class="ruche" src="/static/ruche.svg" alt="">
+    <div class="code">ESAY · Centre de services sécurité</div>
+    <div>
+      <h1>Double <em>authentification</em>.</h1>
+      <p>Votre compte est protégé par un code à usage unique généré par votre application d'authentification.</p>
+    </div>
+    <div class="sources"><span>TOTP · RFC 6238</span><span>Code valable 30 s</span></div>
+  </section>
+  <section class="formulaire">
+    <img src="/static/logo-transparent.png" alt="ESAY Corporation">
+    <h2>Code de vérification</h2>
+    <p class="aide" style="font-size:.95rem">Saisissez le code à 6 chiffres affiché par votre application.</p>
+    <form method="post" action="/connexion/code">
+      {% for m in messages %}<div class="message {{ m.genre }}"><div>{{ m.message }}</div></div>{% endfor %}
+      {% if erreur %}<div class="message erreur"><div>{{ erreur }}</div></div>{% endif %}
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="champ"><label for="code">Code</label>
+        <input type="text" id="code" name="code" class="saisie-code" inputmode="numeric" pattern="[0-9 ]{6,7}" maxlength="7"
+               autocomplete="one-time-code" required autofocus></div>
+      <button class="bouton fleche" type="submit">Vérifier</button>
+    </form>
+    <p class="aide" style="margin-top:18px"><a href="/connexion">Revenir à la connexion</a> · Téléphone perdu : contactez un administrateur.</p>
+    <div class="note">Diffusion restreinte · Confidentiel</div>
+  </section>
+</div>
+{% endblock %}

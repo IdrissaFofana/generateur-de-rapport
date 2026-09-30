@@ -3,10 +3,14 @@ import base64
 import hashlib
 import hmac
 import secrets
+import time
+from collections import defaultdict, deque
+from datetime import datetime, timedelta
 
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session as SessionDB
 
+from . import config
 from .db import session_db
 from .modeles import Utilisateur
 
@@ -44,15 +48,87 @@ class NonConnecte(Exception):
     """Levée quand une page protégée est demandée sans session : redirection vers la connexion."""
 
 
-def utilisateur_courant(request: Request, db: SessionDB = Depends(session_db)) -> Utilisateur:
+# Pages accessibles tant que le compte doit encore être régularisé (mot de passe provisoire, 2FA obligatoire)
+PAGES_REGULARISATION = ("/mon-compte", "/mon-compte/2fa/preparer", "/mon-compte/2fa/activer", "/deconnexion")
+
+
+def ouvrir_session(request: Request, u: Utilisateur):
+    """Session authentifiée : l'identifiant et la version de session (changée = session invalidée)."""
+    request.session.clear()
+    request.session["uid"], request.session["vs"] = u.id, u.version_session
+
+
+def utilisateur_session(request: Request, db) -> Utilisateur | None:
+    """Utilisateur de la session si elle est toujours valide (compte actif, version de session inchangée)."""
     uid = request.session.get("uid")
-    u = db.get(Utilisateur, uid) if uid else None
-    if u is None or not u.actif:
-        request.session.clear()
-        raise NonConnecte()
-    if u.doit_changer_mdp and request.url.path not in ("/mon-compte", "/deconnexion"):
-        raise NonConnecte("changer_mdp")
+    if not uid:
+        return None  # visiteur non connecté : on conserve la session (connexion en attente de code, jeton CSRF)
+    u = db.get(Utilisateur, uid)
+    if u is None or not u.actif or request.session.get("vs") != u.version_session:
+        request.session.clear()  # session périmée (compte désactivé, mot de passe changé…)
+        return None
     return u
+
+
+def utilisateur_courant(request: Request, db: SessionDB = Depends(session_db)) -> Utilisateur:
+    u = utilisateur_session(request, db)
+    if u is None:
+        raise NonConnecte()
+    if request.url.path not in PAGES_REGULARISATION:
+        if u.doit_changer_mdp:
+            raise NonConnecte("changer_mdp")
+        if u.role in config.EXIGER_2FA_ROLES and not u.totp_actif:
+            raise NonConnecte("activer_2fa")
+    return u
+
+
+# --------------------------------------------------------------------------- #
+# Protection contre la force brute
+# --------------------------------------------------------------------------- #
+class LimiteurTentatives:
+    """Fenêtre glissante d'échecs par clé (ici l'adresse IP). En mémoire : l'application tourne avec un seul
+    processus web ; le verrouillage par compte, lui, est stocké en base."""
+
+    def __init__(self, maximum, fenetre_secondes, horloge=time.monotonic):
+        self.maximum, self.fenetre, self.horloge = maximum, fenetre_secondes, horloge
+        self.echecs = defaultdict(deque)
+
+    def _purger(self, cle):
+        file, limite = self.echecs[cle], self.horloge() - self.fenetre
+        while file and file[0] < limite:
+            file.popleft()
+        return file
+
+    def bloque(self, cle):
+        return len(self._purger(cle)) >= self.maximum
+
+    def echec(self, cle):
+        self._purger(cle).append(self.horloge())
+
+    def reinitialiser(self, cle):
+        self.echecs.pop(cle, None)
+
+
+limiteur_ip = LimiteurTentatives(config.LIMITE_ECHECS_IP, config.FENETRE_ECHECS_IP_MINUTES * 60)
+
+
+def compte_verrouille(u: Utilisateur, maintenant=None):
+    return bool(u.bloque_jusqua and u.bloque_jusqua > (maintenant or datetime.now()))
+
+
+def enregistrer_echec(u: Utilisateur, maintenant=None):
+    """Échec d'authentification sur un compte existant : verrouillage temporaire au-delà du seuil."""
+    maintenant = maintenant or datetime.now()
+    u.echecs_connexion = (u.echecs_connexion or 0) + 1
+    if u.echecs_connexion >= config.VERROUILLAGE_ECHECS:
+        u.bloque_jusqua = maintenant + timedelta(minutes=config.VERROUILLAGE_MINUTES)
+        u.echecs_connexion = 0
+        return True  # vient d'être verrouillé
+    return False
+
+
+def adresse_ip(request: Request):
+    return request.client.host if request.client else "inconnue"
 
 
 def exiger(role_minimum):

@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block titre %}Assistances {{ fmt_mois(annee, mois) }}{% endblock %}
+{% block contenu %}
+{% set pa, pm = (annee - 1, 12) if mois == 1 else (annee, mois - 1) %}
+{% set sa, sm = (annee + 1, 1) if mois == 12 else (annee, mois + 1) %}
+<div class="en-tete">
+  <div><div class="surtitre">Service technique · assistance mensuelle</div>
+  <h1>{{ fmt_mois(annee, mois) }}</h1>
+  <p class="sous-titre">Chaque client sous assistance mensuelle doit recevoir au moins une assistance par mois. Elle est planifiée ici,
+  puis réalisée par un rapport d'intervention (type assistance ou maintenance) validé dans le mois.</p></div>
+  <div class="periode">
+    <a href="/assistances?annee={{ pa }}&mois={{ pm }}&periode={{ periode }}" aria-label="Mois précédent">‹</a>
+    <form method="get" action="/assistances" class="selects-periode">
+      <select name="mois" aria-label="Mois">{% for m in MOIS_FR %}<option value="{{ loop.index }}" {{ 'selected' if loop.index == mois }}>{{ m | capitalize }}</option>{% endfor %}</select>
+      <select name="annee" aria-label="Année">{% for a in range(annee - 2, annee + 2) %}<option {{ 'selected' if a == annee }}>{{ a }}</option>{% endfor %}</select>
+      <input type="hidden" name="periode" value="{{ periode }}"><button type="submit">Afficher</button>
+    </form>
+    <a href="/assistances?annee={{ sa }}&mois={{ sm }}&periode={{ periode }}" aria-label="Mois suivant">›</a>
+  </div>
+</div>
+
+{% set cpt = p.comptes %}
+<div class="indicateurs">
+  <div class="indicateur marine"><div class="valeur">{{ p.dues }}</div><div class="libelle">Assistances dues</div></div>
+  <div class="indicateur ok"><div class="valeur">{{ cpt.get("realisee", 0) }}</div><div class="libelle">Réalisées</div>
+    <div class="jauge"><i style="width:{{ p.taux or 0 }}%"></i></div></div>
+  <div class="indicateur cours"><div class="valeur">{{ cpt.get("planifiee", 0) }}</div><div class="libelle">Planifiées</div></div>
+  <div class="indicateur"><div class="valeur">{{ cpt.get("a_planifier", 0) }}</div><div class="libelle">À planifier</div></div>
+  <div class="indicateur critique"><div class="valeur">{{ cpt.get("retard", 0) }}</div><div class="libelle">En retard</div></div>
+  <div class="indicateur"><div class="valeur">{{ cpt.get("reportee", 0) }}</div><div class="libelle">Reportées (justifiées)</div></div>
+</div>
+
+<div class="carte">
+  <div class="titre-carte"><h2>Planning du mois</h2><span class="aide">conformité : {{ p.taux if p.taux is not none else "—" }}{{ " %" if p.taux is not none }}</span></div>
+  {% if p.lignes %}
+  <div class="tableau"><table class="liste planning">
+    <thead><tr><th>Client</th><th>État</th><th>Date prévue · technicien</th><th>Rapport</th><th></th></tr></thead>
+    <tbody>{% for a in p.lignes %}{% set cle, lib = etat(a) %}<tr>
+      <td class="client"><a href="/clients/{{ a.client_id }}/interventions">{{ a.client.nom }}</a></td>
+      <td><span class="pastille {{ {'realisee': 'ok', 'planifiee': 'cours', 'a_planifier': 'attente', 'retard': 'erreur', 'reportee': 'alerte'}[cle] }}">{{ lib }}</span>
+        {% if a.statut == "reportee" %}<div class="aide">{{ a.justification }}</div>{% endif %}</td>
+      <td>{% if a.statut in ("a_planifier", "planifiee") and utilisateur.peut("operateur") %}
+        <form method="post" action="/assistances/{{ a.id }}" class="en-ligne planifier">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="date" name="date_prevue" value="{{ a.date_prevue.isoformat() if a.date_prevue else '' }}" aria-label="Date prévue">
+          <select name="technicien_id" aria-label="Technicien"><option value="">Technicien…</option>
+            {% for t in techniciens %}<option value="{{ t.id }}" {{ 'selected' if a.technicien_id == t.id }}>{{ t.nom }}</option>{% endfor %}</select>
+          <button class="bouton petit secondaire" type="submit">Planifier</button>
+        </form>
+        {% else %}<span class="date">{{ a.date_prevue | fdate if a.date_prevue else "—" }}</span>{% if a.technicien %} <span class="aide">· {{ a.technicien.nom }}</span>{% endif %}{% endif %}</td>
+      <td>{% if a.intervention %}<a href="/interventions/{{ a.intervention_id }}" class="mono nobr">{{ a.intervention.numero }}</a>
+          {% if a.intervention.statut != "valide" %}<div class="aide">brouillon : compte à la validation</div>{% endif %}{% else %}<span class="aide">—</span>{% endif %}</td>
+      <td class="fin">{% if utilisateur.peut("operateur") and a.statut != "realisee" and a.statut != "reportee" %}
+        <form method="post" action="/assistances/{{ a.id }}/rediger" style="display:inline"><input type="hidden" name="csrf" value="{{ csrf }}">
+          <button class="bouton petit fleche" type="submit">{{ "Ouvrir le rapport" if a.intervention_id else "Rédiger le rapport" }}</button></form>
+        {% endif %}
+        {% if utilisateur.peut("validateur") %}
+          {% if a.statut in ("a_planifier", "planifiee") %}
+          <details class="reporter"><summary class="bouton petit fantome">Reporter</summary>
+            <form method="post" action="/assistances/{{ a.id }}/reporter"><input type="hidden" name="csrf" value="{{ csrf }}">
+              <input type="text" name="justification" placeholder="Justification (ex. client indisponible)" required>
+              <button class="bouton petit" type="submit">Confirmer</button></form></details>
+          {% elif a.statut == "reportee" %}
+          <form method="post" action="/assistances/{{ a.id }}/rouvrir" style="display:inline"><input type="hidden" name="csrf" value="{{ csrf }}">
+            <button class="bouton petit fantome" type="submit">Annuler le report</button></form>
+          {% endif %}
+        {% endif %}</td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="aide" style="margin:0">Aucun client sous assistance mensuelle. Activez-la dans la fiche d'un client
+  (Administration → Clients → « Assistance mensuelle »).</p>{% endif %}
+</div>
+
+<div class="barre-filtres">
+  <span class="aide">Classements sur</span>
+  <div class="segments">{% for cle, lib in PERIODES.items() %}<a href="/assistances?annee={{ annee }}&mois={{ mois }}&periode={{ cle }}" class="{{ 'actif' if periode == cle }}">{{ lib | capitalize }}</a>{% endfor %}</div>
+  <span class="aide mono">{{ debut | fdate }} → {{ fin_incluse | fdate }}</span>
+</div>
+
+<div class="carte">
+  <div class="titre-carte"><h2>Classement des clients</h2><span class="aide">clic sur un en-tête pour trier</span></div>
+  {% if clients %}
+  <div class="tableau"><table class="liste triable">
+    <thead><tr><th data-tri="texte">Client</th><th data-tri="nombre">Interventions</th><th data-tri="nombre">Heures</th><th data-tri="nombre">Assistances</th>
+      <th data-tri="nombre">Conformité</th><th data-tri="nombre">Points bloquants</th><th data-tri="texte">Types</th><th data-tri="texte">Dernière visite</th></tr></thead>
+    <tbody>{% for l in clients %}<tr>
+      <td class="client" data-val="{{ l.client.nom }}"><a href="/clients/{{ l.client.id }}/interventions">{{ l.client.nom }}</a></td>
+      <td class="date" data-val="{{ l.interventions }}">{{ l.interventions }}</td>
+      <td class="date" data-val="{{ l.heures }}">{{ l.heures | string | replace(".", ",") }}</td>
+      <td class="date" data-val="{{ l.faites or 0 }}">{% if l.dues is defined %}{{ l.faites }}/{{ l.dues }}{% else %}—{% endif %}</td>
+      <td data-val="{{ l.conformite if l.conformite is not none else -1 }}">{% if l.conformite is not none %}<div class="barre-valeur {{ 'faible' if l.conformite < 100 }}"><i style="width:{{ [l.conformite, 100] | min }}%"></i><span>{{ l.conformite }} %</span></div>{% else %}<span class="aide">—</span>{% endif %}</td>
+      <td class="date" data-val="{{ l.points }}">{{ l.points }}</td>
+      <td data-val="{{ l.types | length }}"><span class="types">{% for t, n in l.types.items() %}<span class="etiquette">{{ t }} {{ n }}</span>{% endfor %}</span></td>
+      <td class="date" data-val="{{ l.derniere.isoformat() if l.derniere else '' }}">{{ l.derniere | fdate if l.derniere else "—" }}</td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="aide" style="margin:0">Aucune intervention validée sur la période.</p>{% endif %}
+</div>
+
+<div class="carte">
+  <div class="titre-carte"><h2>Classement des techniciens</h2><a class="aide" href="/techniciens">fiches des techniciens →</a></div>
+  <div class="tableau"><table class="liste triable">
+    <thead><tr><th data-tri="texte">Technicien</th><th data-tri="nombre">Interventions</th><th data-tri="nombre">Heures</th><th data-tri="nombre">Clients</th>
+      <th data-tri="nombre">Formations</th><th data-tri="nombre">Certifications</th><th data-tri="texte">Types</th></tr></thead>
+    <tbody>{% for l in techs %}<tr>
+      <td data-val="{{ l.utilisateur.nom }}"><a class="client" href="/techniciens/{{ l.utilisateur.id }}">{{ l.utilisateur.nom }}</a><div class="aide">{{ l.utilisateur.libelle_role }}</div></td>
+      <td class="date" data-val="{{ l.interventions }}">{{ l.interventions }}</td><td class="date" data-val="{{ l.heures }}">{{ l.heures | string | replace(".", ",") }}</td>
+      <td class="date" data-val="{{ l.clients }}">{{ l.clients }}</td><td class="date" data-val="{{ l.formations }}">{{ l.formations }}</td>
+      <td class="date" data-val="{{ l.certifications }}">{{ l.certifications }}</td>
+      <td><span class="types">{% for t, n in l.types.items() %}<span class="etiquette">{{ t }} {{ n }}</span>{% endfor %}</span></td>
+    </tr>{% else %}<tr><td colspan="7" class="vide">Aucun technicien.</td></tr>{% endfor %}</tbody>
+  </table></div>
+  <p class="aide" style="margin:10px 0 0">Un technicien est compté sur une intervention quand son nom figure parmi les intervenants du rapport.</p>
+</div>
+{% endblock %}

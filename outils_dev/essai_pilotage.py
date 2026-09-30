@@ -15,7 +15,7 @@ from sqlalchemy import delete, func, select, update
 from app import alertes, config, services
 from app.db import Session
 from app.main import app
-from app.modeles import VALIDE, Alerte, Client, Contrat, Envoi, ExportKsc, Hebdo, Journal, Rapport, Utilisateur
+from app.modeles import VALIDE, Alerte, Client, Contrat, Envoi, ExportKsc, Hebdo, Rapport, Utilisateur
 from app.moteur import parc as mparc
 from app.securite import hacher
 
@@ -224,7 +224,6 @@ def main():
                     from app.stockage import supprimer
                     supprimer(r.pdf)
                 db.delete(r)
-            db.execute(delete(Journal).where(Journal.utilisateur_id.in_(ids)))
             db.execute(delete(Utilisateur).where(Utilisateur.id.in_(ids)))
             db.commit()
         print("Données d'essai supprimées.")

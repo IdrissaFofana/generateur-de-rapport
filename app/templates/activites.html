@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block titre %}Activités internes {{ annee }}{% endblock %}
+{% block contenu %}
+<div class="en-tete">
+  <div><div class="surtitre">Service technique</div><h1>Activités internes {{ annee }}</h1>
+  <p class="sous-titre">Ce que fait le service en dehors des clients : projets internes, webinaires, réunions, formations dispensées,
+  veille. Elles figurent dans le rapport d'activité du service.</p></div>
+  <div class="segments">{% for a in range(annee - 2, annee + 2) %}<a href="/activites?annee={{ a }}" class="{{ 'actif' if a == annee }}">{{ a }}</a>{% endfor %}</div>
+</div>
+
+<form method="post" action="/activites" class="carte">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <div class="titre-carte"><h2>Nouvelle activité</h2></div>
+  <div class="grille" style="grid-template-columns: 150px 190px minmax(0, 1fr) 110px">
+    <div class="champ"><label>Date</label><input type="date" name="date" required id="date-act"></div>
+    <div class="champ"><label>Type</label><select name="type">{% for cle, lib in TYPES.items() %}<option value="{{ cle }}">{{ lib }}</option>{% endfor %}</select></div>
+    <div class="champ"><label>Titre</label><input type="text" name="titre" required placeholder="ex. Webinaire Kaspersky Next XDR"></div>
+    <div class="champ"><label>Heures</label><input type="text" name="duree" inputmode="decimal" placeholder="2"></div>
+  </div>
+  <div class="grille">
+    <div class="champ"><label>Participants <span class="aide">— séparés par des virgules</span></label>
+      <input type="text" name="participants" list="noms" placeholder="{{ noms[:2] | join(', ') }}"></div>
+    <div class="champ"><label>Description</label><input type="text" name="description"></div>
+  </div>
+  <datalist id="noms">{% for n in noms %}<option value="{{ n }}">{% endfor %}</datalist>
+  <button class="bouton" type="submit">Enregistrer</button>
+</form>
+<script>document.getElementById("date-act").valueAsDate = new Date();</script>
+
+<div class="tableau">
+<table class="liste triable">
+<thead><tr><th data-tri="texte">Date</th><th data-tri="texte">Type</th><th data-tri="texte">Activité</th><th data-tri="texte">Participants</th><th data-tri="nombre">Heures</th><th></th></tr></thead>
+<tbody>
+{% for a in lignes %}
+<tr>
+  <td class="date" data-val="{{ a.date.isoformat() }}">{{ a.date | fdate }}</td>
+  <td><span class="etiquette">{{ TYPES.get(a.type, a.type) }}</span></td>
+  <td><strong>{{ a.titre }}</strong>{% if a.description %}<div class="aide">{{ a.description }}</div>{% endif %}</td>
+  <td class="aide">{{ a.participants | join(", ") or "—" }}</td>
+  <td class="date" data-val="{{ a.duree_heures or 0 }}">{{ a.duree_heures | string | replace(".", ",") if a.duree_heures else "—" }}</td>
+  <td class="fin">{% if a.cree_par_id == utilisateur.id or utilisateur.peut("validateur") %}
+    <form method="post" action="/activites/{{ a.id }}/supprimer" onsubmit="return confirm('Supprimer cette activité ?')">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><button class="bouton petit danger" type="submit">Supprimer</button></form>{% endif %}</td>
+</tr>
+{% else %}<tr><td colspan="6" class="vide">Aucune activité interne en {{ annee }}.</td></tr>{% endfor %}
+</tbody>
+</table>
+</div>
+{% endblock %}

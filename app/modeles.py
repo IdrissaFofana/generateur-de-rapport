@@ -1,7 +1,7 @@
 """Modèle de données."""
 from datetime import date, datetime, time
 
-from sqlalchemy import (Boolean, Date, DateTime, ForeignKey, Integer, String, Text, Time, UniqueConstraint, func)
+from sqlalchemy import (Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, Time, UniqueConstraint, func)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -38,6 +38,15 @@ class Utilisateur(Base):
     doit_changer_mdp: Mapped[bool] = mapped_column(Boolean, default=True)
     cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     derniere_connexion: Mapped[datetime | None] = mapped_column(DateTime)
+    # Protection contre la force brute : échecs consécutifs et verrouillage temporaire
+    echecs_connexion: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    bloque_jusqua: Mapped[datetime | None] = mapped_column(DateTime)
+    # Incrémentée à chaque changement sensible : invalide les sessions ouvertes ailleurs
+    version_session: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+    # Double authentification (TOTP) ; dernier pas accepté pour refuser le rejeu d'un code
+    totp_secret: Mapped[str | None] = mapped_column(String(64))
+    totp_actif: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    totp_dernier_pas: Mapped[int | None] = mapped_column(Integer)
 
     def peut(self, role_minimum):
         return self.actif and NIVEAUX[self.role] >= NIVEAUX[role_minimum]
@@ -61,6 +70,9 @@ class Client(Base):
     # Code court des numéros de rapport d'intervention (RI-2026-HUD-004) et destinataires des rapports
     code: Mapped[str | None] = mapped_column(String(10))
     emails_rapports: Mapped[list] = mapped_column(JSONB, default=list, server_default="[]")
+    # Assistance mensuelle : au moins une assistance par mois, planifiée automatiquement
+    assistance_mensuelle: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    assistance_depuis: Mapped[date | None] = mapped_column(Date)
     cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     @property
@@ -146,13 +158,16 @@ class Rapport(Base):
 
 
 class Journal(Base):
-    """Traçabilité : qui a fait quoi."""
+    """Traçabilité : qui a fait quoi. Lignes chaînées par empreinte SHA-256 (voir app/integrite.py)."""
     __tablename__ = "journal"
     id: Mapped[int] = mapped_column(primary_key=True)
-    utilisateur_id: Mapped[int | None] = mapped_column(ForeignKey("utilisateurs.id"), index=True)
+    utilisateur_id: Mapped[int | None] = mapped_column(ForeignKey("utilisateurs.id", ondelete="SET NULL"), index=True)
+    acteur: Mapped[str] = mapped_column(String(200), default="", server_default="")  # e-mail figé au moment de l'action
     action: Mapped[str] = mapped_column(String(100))
     detail: Mapped[str] = mapped_column(Text, default="")
     quand: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
+    empreinte_precedente: Mapped[str | None] = mapped_column(String(64))
+    empreinte: Mapped[str | None] = mapped_column(String(64))
     utilisateur = relationship("Utilisateur")
 
 
@@ -261,6 +276,12 @@ class Intervention(Base):
     valide_le: Mapped[datetime | None] = mapped_column(DateTime)
     envoye_le: Mapped[datetime | None] = mapped_column(DateTime)
     envoye_a: Mapped[str] = mapped_column(Text, default="")
+    # Provenance : saisie dans la plateforme ou import d'un ancien rapport (fichier d'origine conservé)
+    source: Mapped[str] = mapped_column(String(20), default="saisie", server_default="saisie")
+    fichier_source: Mapped[str | None] = mapped_column(String(500))
+    nom_fichier_source: Mapped[str | None] = mapped_column(String(300))
+    texte_source: Mapped[str | None] = mapped_column(Text)
+    a_verifier: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     client = relationship("Client")
     cree_par = relationship("Utilisateur", foreign_keys=[cree_par_id])
     valide_par = relationship("Utilisateur", foreign_keys=[valide_par_id])
@@ -288,5 +309,116 @@ class ElementBibliotheque(Base):
     cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
-def journaliser(db, utilisateur, action, detail=""):
-    db.add(Journal(utilisateur_id=utilisateur.id if utilisateur else None, action=action, detail=detail))
+# --------------------------------------------------------------------------- #
+# Service technique : assistances mensuelles, techniciens, activités internes, rapports du service
+# --------------------------------------------------------------------------- #
+STATUTS_ASSISTANCE = {"a_planifier": "À planifier", "planifiee": "Planifiée", "realisee": "Réalisée", "reportee": "Reportée"}
+
+
+class AssistancePlanifiee(Base):
+    """Assistance mensuelle due à un client pour un mois donné (créée automatiquement chaque mois)."""
+    __tablename__ = "assistances_planifiees"
+    __table_args__ = (UniqueConstraint("client_id", "annee", "mois"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id"), index=True)
+    annee: Mapped[int] = mapped_column(Integer)
+    mois: Mapped[int] = mapped_column(Integer)
+    statut: Mapped[str] = mapped_column(String(20), default="a_planifier")
+    date_prevue: Mapped[date | None] = mapped_column(Date)
+    technicien_id: Mapped[int | None] = mapped_column(ForeignKey("utilisateurs.id", ondelete="SET NULL"))
+    intervention_id: Mapped[int | None] = mapped_column(ForeignKey("interventions.id", ondelete="SET NULL"))
+    justification: Mapped[str] = mapped_column(Text, default="")
+    cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    client = relationship("Client")
+    technicien = relationship("Utilisateur")
+    intervention = relationship("Intervention")
+
+
+STATUTS_FORMATION = ("Prévue", "En cours", "Terminée")
+
+
+class Formation(Base):
+    """Parcours d'un technicien : formations suivies ou prévues."""
+    __tablename__ = "formations"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id", ondelete="CASCADE"), index=True)
+    intitule: Mapped[str] = mapped_column(String(300))
+    organisme: Mapped[str] = mapped_column(String(200), default="")
+    debut: Mapped[date | None] = mapped_column(Date)
+    fin: Mapped[date | None] = mapped_column(Date)
+    statut: Mapped[str] = mapped_column(String(20), default="Terminée")
+    heures: Mapped[int | None] = mapped_column(Integer)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    utilisateur = relationship("Utilisateur")
+
+
+class Certification(Base):
+    """Certification obtenue par un technicien, avec son justificatif (PDF ou image)."""
+    __tablename__ = "certifications"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id", ondelete="CASCADE"), index=True)
+    intitule: Mapped[str] = mapped_column(String(300))
+    editeur: Mapped[str] = mapped_column(String(100), default="Kaspersky")
+    numero: Mapped[str] = mapped_column(String(100), default="")
+    obtenue_le: Mapped[date] = mapped_column(Date)
+    expire_le: Mapped[date | None] = mapped_column(Date, index=True)
+    fichier: Mapped[str | None] = mapped_column(String(500))
+    nom_fichier: Mapped[str | None] = mapped_column(String(300))
+    cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    utilisateur = relationship("Utilisateur")
+
+
+TYPES_ACTIVITE = {"projet": "Projet interne", "webinaire": "Webinaire / événement", "reunion": "Réunion",
+                  "formation_donnee": "Formation dispensée", "veille": "Veille technique", "autre": "Autre"}
+
+
+class ActiviteInterne(Base):
+    """Activité du service sans client : projets internes, webinaires, réunions, veille…"""
+    __tablename__ = "activites_internes"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    date: Mapped[date] = mapped_column(Date, index=True)
+    type: Mapped[str] = mapped_column(String(30), default="projet")
+    titre: Mapped[str] = mapped_column(String(300))
+    description: Mapped[str] = mapped_column(Text, default="")
+    participants: Mapped[list] = mapped_column(JSONB, default=list)
+    duree_heures: Mapped[float | None] = mapped_column(Float)
+    cree_par_id: Mapped[int | None] = mapped_column(ForeignKey("utilisateurs.id", ondelete="SET NULL"))
+    cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+PERIODICITES_SERVICE = {"mensuel": 1, "trimestriel": 3, "semestriel": 6, "annuel": 12}
+
+
+class RapportService(Base):
+    """Rapport d'activité du service technique pour une période (versionné, figé à la validation)."""
+    __tablename__ = "rapports_service"
+    __table_args__ = (UniqueConstraint("periodicite", "annee", "numero", "version"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    periodicite: Mapped[str] = mapped_column(String(20))
+    annee: Mapped[int] = mapped_column(Integer)
+    numero: Mapped[int] = mapped_column(Integer)  # mois, trimestre ou semestre (1 pour l'année)
+    debut: Mapped[date] = mapped_column(Date)
+    fin: Mapped[date] = mapped_column(Date)  # exclue
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    statut: Mapped[str] = mapped_column(String(20), default=BROUILLON)
+    donnees: Mapped[dict] = mapped_column(JSONB)
+    contenu: Mapped[dict] = mapped_column(JSONB)
+    pdf: Mapped[str | None] = mapped_column(String(500))
+    cree_par_id: Mapped[int | None] = mapped_column(ForeignKey("utilisateurs.id", ondelete="SET NULL"))
+    cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    valide_par_id: Mapped[int | None] = mapped_column(ForeignKey("utilisateurs.id", ondelete="SET NULL"))
+    valide_le: Mapped[datetime | None] = mapped_column(DateTime)
+    cree_par = relationship("Utilisateur", foreign_keys=[cree_par_id])
+    valide_par = relationship("Utilisateur", foreign_keys=[valide_par_id])
+
+
+def journaliser(db, utilisateur, action, detail="", acteur=None):
+    """Ajoute une ligne chaînée au journal (dans la transaction en cours)."""
+    from .integrite import chainer
+    ligne = Journal(utilisateur_id=utilisateur.id if utilisateur else None,
+                    acteur=acteur or (utilisateur.email if utilisateur else "système"),
+                    action=action, detail=detail or "", quand=datetime.now())
+    db.add(ligne)
+    chainer(db, ligne)
+    return ligne

@@ -16,7 +16,7 @@ from sqlalchemy import delete, func, select
 from app import services
 from app.db import Session
 from app.main import app
-from app.modeles import Alerte, VALIDE, Client, Journal, Rapport, Utilisateur
+from app.modeles import Alerte, VALIDE, Client, Rapport, Utilisateur
 from app.moteur import bilan as mbilan
 from app.moteur.analyse import analyser_mdr
 from app.securite import hacher
@@ -160,7 +160,6 @@ def main():
                     supprimer(r.pdf)
                 db.delete(r)
             db.execute(delete(Alerte).where(Alerte.id > alerte_max))
-            db.execute(delete(Journal).where(Journal.utilisateur_id == uid))
             db.execute(delete(Utilisateur).where(Utilisateur.id == uid))
             db.commit()
         print("Compte, rapports et bilans d'essai supprimés.")

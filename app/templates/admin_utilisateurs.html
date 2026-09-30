@@ -25,7 +25,7 @@
 
 <div class="tableau">
 <table class="liste">
-<thead><tr><th>Nom</th><th>E-mail</th><th>Rôle</th><th>Actif</th><th>Dernière connexion</th><th></th></tr></thead>
+<thead><tr><th>Nom</th><th>E-mail</th><th>Rôle</th><th>Actif</th><th>Sécurité</th><th>Dernière connexion</th><th></th></tr></thead>
 <tbody>
 {% for x in liste %}
 <tr class="{{ '' if x.actif else 'inactif' }}">
@@ -34,6 +34,8 @@
   <td>{{ x.email }}{% if x.id == utilisateur.id %} <span class="etiquette">vous</span>{% endif %}</td>
   <td><select name="role" form="f{{ x.id }}" style="min-width:170px">{% for cle, lib in ROLES.items() %}<option value="{{ cle }}" {{ 'selected' if cle == x.role }}>{{ lib }}</option>{% endfor %}</select></td>
   <td><input type="checkbox" name="actif" value="true" form="f{{ x.id }}" {{ 'checked' if x.actif }} aria-label="Compte actif"></td>
+  <td class="nobr">{% if x.totp_actif %}<span class="etiquette ok" title="Double authentification active">2FA</span>{% else %}<span class="etiquette" title="Double authentification inactive">sans 2FA</span>{% endif %}
+    {% if x.bloque_jusqua and x.bloque_jusqua > maintenant %}<br><span class="etiquette erreur" title="Trop d'échecs de connexion">verrouillé jusqu'à {{ x.bloque_jusqua.strftime("%H:%M") }}</span>{% endif %}</td>
   <td class="date">{{ x.derniere_connexion | fdatetime }}</td>
   <td class="fin"><span class="en-ligne" style="justify-content:flex-end;flex-wrap:nowrap">
     <button class="bouton petit" type="submit" form="f{{ x.id }}">Enregistrer</button>
@@ -41,7 +43,13 @@
           onsubmit="return confirm('Générer un nouveau mot de passe provisoire pour {{ x.email }} ?')">
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <button class="bouton petit fantome" type="submit" title="Générer un nouveau mot de passe provisoire">Réinitialiser</button>
-    </form></span>
+    </form>
+    {% if x.bloque_jusqua and x.bloque_jusqua > maintenant %}
+    <form method="post" action="/admin/utilisateurs/{{ x.id }}/deverrouiller"><input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="bouton petit fantome" type="submit">Déverrouiller</button></form>{% endif %}
+    {% if x.totp_actif %}
+    <form method="post" action="/admin/utilisateurs/{{ x.id }}/reinitialiser-2fa" onsubmit="return confirm('Réinitialiser la double authentification de {{ x.email }} (téléphone perdu) ?')">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><button class="bouton petit fantome" type="submit" title="Téléphone perdu">Réinit. 2FA</button></form>{% endif %}</span>
   </td>
 </tr>
 {% endfor %}

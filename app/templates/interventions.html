@@ -4,7 +4,10 @@
 <div class="en-tete">
   <div><div class="surtitre">Production</div><h1>Rapports d'intervention</h1>
   <p class="sous-titre">Saisis au retour d'intervention, générés aux couleurs d'ESAY puis envoyés au client. Le titre du document dépend du type.</p></div>
-  {% if utilisateur.peut("operateur") %}<a class="bouton secondaire" href="/bibliotheque">Bibliothèque d'actions</a>{% endif %}
+  {% if utilisateur.peut("operateur") %}<div class="en-ligne">
+    <a class="bouton secondaire" href="/interventions/importer">Importer d'anciens rapports</a>
+    <a class="bouton secondaire" href="/connaissances">Base de connaissances</a>
+    <a class="bouton secondaire" href="/bibliotheque">Bibliothèque d'actions</a></div>{% endif %}
 </div>
 
 {% if utilisateur.peut("operateur") %}

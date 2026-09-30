@@ -3,9 +3,9 @@ import json
 from datetime import date, datetime, time
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import Response
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, Response
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session as SessionDB
 
 from .. import alertes
@@ -14,6 +14,8 @@ from ..db import session_db
 from ..modeles import (BROUILLON, MODES_INTERVENTION, STATUTS_INTERVENTION, TYPES_INTERVENTION, VALIDE, Client,
                        ElementBibliotheque, Intervention, Utilisateur, journaliser)
 from ..securite import exiger, verifier_csrf
+from ..stockage import DepotInvalide, absolu, lire_fichier, type_mime
+from ..stockage import supprimer as supprimer_fichier
 from .commun import flash, page, rediriger
 
 routes = APIRouter()
@@ -85,6 +87,61 @@ def creer(request: Request, client_id: int = Form(...), type: str = Form(...), d
     db.commit()
     flash(request, f"Rapport {i.numero} créé : complétez-le puis validez-le.")
     return rediriger(f"/interventions/{i.id}")
+
+
+# --------------------------------------------------------------------------- #
+# Import d'anciens rapports (déclaré avant /interventions/{iid})
+# --------------------------------------------------------------------------- #
+@routes.get("/interventions/importer")
+def importer_form(request: Request, u=Depends(operateur), db: SessionDB = Depends(session_db)):
+    a_verifier = db.scalars(select(Intervention).where(Intervention.a_verifier.is_(True)).order_by(Intervention.cree_le.desc())).all()
+    importes = db.scalar(select(func.count()).select_from(Intervention).where(Intervention.source == "import", Intervention.a_verifier.is_(False)))
+    return page(request, "import_interventions.html", u, a_verifier=a_verifier, importes=importes,
+                clients=db.scalars(select(Client).where(Client.actif.is_(True)).order_by(Client.nom)).all())
+
+
+@routes.post("/interventions/importer", dependencies=[Depends(verifier_csrf)])
+async def importer(request: Request, fichiers: list[UploadFile] = File(...), client_defaut: str = Form(""),
+                   u=Depends(operateur), db: SessionDB = Depends(session_db)):
+    reussis, erreurs = [], []
+    for f in fichiers:
+        try:
+            contenu, extension = await lire_fichier(f, (".pdf", ".docx"))
+            i, manquants = mi.importer(db, contenu, extension, f.filename or "rapport", u,
+                                       int(client_defaut) if client_defaut.isdigit() else None)
+            db.flush()
+            journaliser(db, u, "import intervention", f"{i.numero} depuis « {f.filename} »")
+            reussis.append(f"{i.numero}" + (f" (à compléter : {', '.join(manquants)})" if manquants else ""))
+        except (DepotInvalide, ValueError) as e:
+            erreurs.append(f"{f.filename} : {e}")
+        except Exception as e:  # noqa: BLE001  (document illisible)
+            erreurs.append(f"{f.filename} : lecture impossible ({e.__class__.__name__})")
+    db.commit()
+    if reussis:
+        flash(request, f"{len(reussis)} rapport(s) importé(s), à vérifier : {'; '.join(reussis)}.")
+    if erreurs:
+        flash(request, "Non importé(s) : " + " · ".join(erreurs), "erreur")
+    return rediriger("/interventions/importer")
+
+
+@routes.post("/interventions/{iid}/confirmer-import", dependencies=[Depends(verifier_csrf)])
+def confirmer_import(request: Request, iid: int, u=Depends(operateur), db: SessionDB = Depends(session_db)):
+    i = _intervention(db, iid)
+    if i.source != "import" or i.statut != BROUILLON:
+        raise HTTPException(400, "Ce rapport n'est pas un import en attente de vérification.")
+    mi.confirmer_import(db, i, u)
+    journaliser(db, u, "confirmation import intervention", i.numero)
+    db.commit()
+    flash(request, f"Import {i.numero} vérifié : il compte désormais dans les statistiques et la base de connaissances.")
+    return rediriger(f"/interventions/{iid}")
+
+
+@routes.get("/interventions/{iid}/original")
+def original(iid: int, u=Depends(operateur), db: SessionDB = Depends(session_db)):
+    i = _intervention(db, iid)
+    if not i.fichier_source:
+        raise HTTPException(404)
+    return FileResponse(absolu(i.fichier_source), media_type=type_mime(i.fichier_source), filename=i.nom_fichier_source or "rapport")
 
 
 @routes.post("/interventions/{iid}/dupliquer", dependencies=[Depends(verifier_csrf)])
@@ -182,9 +239,12 @@ def apercu(iid: int, u=Depends(operateur), db: SessionDB = Depends(session_db)):
 @routes.get("/interventions/{iid}/pdf")
 def telecharger(iid: int, u=Depends(lecteur), db: SessionDB = Depends(session_db)):
     i = _intervention(db, iid)
+    if i.statut == VALIDE and not i.pdf and i.fichier_source:  # import Word confirmé : le document d'origine fait foi
+        return FileResponse(absolu(i.fichier_source), media_type=type_mime(i.fichier_source), filename=i.nom_fichier_source)
     if i.statut != VALIDE or not i.pdf:
         raise HTTPException(400, "Le PDF définitif n'existe qu'une fois le rapport validé.")
-    return _pdf(mi.lire_pdf(i), mi.nom_fichier(i), telecharger=True)
+    nom = i.nom_fichier_source if i.source == "import" and i.pdf == i.fichier_source else mi.nom_fichier(i)
+    return _pdf(mi.lire_pdf(i), nom, telecharger=True)
 
 
 @routes.post("/interventions/{iid}/valider", dependencies=[Depends(verifier_csrf)])
@@ -251,10 +311,13 @@ def supprimer(request: Request, iid: int, u=Depends(operateur), db: SessionDB = 
     if i.statut != BROUILLON or i.pdf:
         raise HTTPException(400, "Seul un brouillon jamais validé peut être supprimé.")
     journaliser(db, u, "suppression intervention", i.numero)
+    importe, fichier = i.source == "import", i.fichier_source
     db.delete(i)
     db.commit()
+    if fichier:
+        supprimer_fichier(fichier)
     flash(request, f"Brouillon {i.numero} supprimé.")
-    return rediriger("/interventions")
+    return rediriger("/interventions/importer" if importe else "/interventions")
 
 
 # --------------------------------------------------------------------------- #

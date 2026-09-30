@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block titre %}Rapport d'activité — {{ libelle }}{% endblock %}
+{% block contenu %}
+{% set ch = d.chiffres %}
+<a class="retour" href="/service?periodicite={{ r.periodicite }}&annee={{ r.annee }}&numero={{ r.numero }}">Rapports d'activité</a>
+<div class="en-tete">
+  <div><div class="surtitre">Rapport d'activité du service technique · {{ r.periodicite }}</div>
+  <h1>{{ libelle }}</h1>
+  <div class="meta"><span class="pastille {{ 'ok' if r.statut == 'valide' else 'cours' }}">{{ "Validé" if r.statut == "valide" else "Brouillon" }}</span>
+    <span class="etiquette">v{{ r.version }}</span>
+    <span class="aide">Créé le <span class="mono">{{ r.cree_le | fdatetime }}</span>{% if r.cree_par %} par {{ r.cree_par.nom }}{% endif %}
+    {% if r.valide_le %} · validé le <span class="mono">{{ r.valide_le | fdatetime }}</span>{% endif %}</span></div></div>
+  <div class="en-ligne">
+    {% if r.statut == "valide" %}
+      {% if utilisateur.peut("validateur") %}<form method="post" action="/service/{{ r.id }}/nouvelle-version"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="bouton secondaire" type="submit">Nouvelle version</button></form>{% endif %}
+      <a class="bouton" href="/service/{{ r.id }}/pdf">Télécharger le PDF</a>
+    {% elif modifiable %}
+      <form method="post" action="/service/{{ r.id }}/actualiser"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="bouton secondaire" type="submit">Actualiser les chiffres</button></form>
+      <form method="post" action="/service/{{ r.id }}/valider" onsubmit="return confirm('Valider le rapport ? Le PDF définitif sera archivé.')">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><button class="bouton valider" type="submit">Valider</button></form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="indicateurs">
+  <div class="indicateur marine"><div class="valeur">{{ ch.interventions }}</div><div class="libelle">Interventions</div></div>
+  <div class="indicateur"><div class="valeur">{{ ch.heures | string | replace(".", ",") }}</div><div class="libelle">Heures de présence</div></div>
+  <div class="indicateur ok"><div class="valeur">{{ ch.taux_assistance if ch.taux_assistance is not none else "—" }}{{ " %" if ch.taux_assistance is not none }}</div><div class="libelle">Assistances mensuelles</div></div>
+  <div class="indicateur cours"><div class="valeur">{{ ch.certifications_obtenues }}</div><div class="libelle">Certifications obtenues</div></div>
+  <div class="indicateur"><div class="valeur">{{ ch.activites_internes }}</div><div class="libelle">Activités internes</div></div>
+</div>
+
+<div class="relecture">
+<div>
+<form method="post" action="/service/{{ r.id }}/contenu">
+<input type="hidden" name="csrf" value="{{ csrf }}">
+<fieldset {{ 'disabled' if not modifiable }}>
+<div class="carte"><div class="titre-carte"><h2><span class="section-num">01</span>Synthèse</h2></div>
+  <textarea name="synthese" rows="7">{{ c.synthese }}</textarea></div>
+<div class="carte"><div class="titre-carte"><h2><span class="section-num">02</span>Faits marquants</h2><span class="aide">un par ligne</span></div>
+  <textarea name="faits_marquants" rows="6">{{ c.faits_marquants | join("\n") }}</textarea></div>
+<div class="carte"><div class="titre-carte"><h2><span class="section-num">03</span>Perspectives</h2><span class="aide">une par ligne</span></div>
+  <textarea name="perspectives" rows="5">{{ c.perspectives | join("\n") }}</textarea></div>
+<div class="carte"><div class="titre-carte"><h2><span class="section-num">04</span>Conclusion</h2></div>
+  <textarea name="conclusion" rows="4">{{ c.conclusion }}</textarea></div>
+</fieldset>
+{% if modifiable %}<div class="barre-enregistrer"><button class="bouton" type="submit">Enregistrer</button>
+  <span class="aide">Les tableaux (clients, techniciens, certifications…) sont calculés : « Actualiser les chiffres » les recalcule.</span></div>{% endif %}
+</form>
+</div>
+<div class="colonne-apercu">
+  <div class="apercu-cadre">
+    <div class="barre-apercu"><strong>Aperçu du PDF</strong><a href="/service/{{ r.id }}/apercu.pdf" target="_blank">Ouvrir ↗</a></div>
+    <iframe src="/service/{{ r.id }}/apercu.pdf#view=FitH" title="Aperçu du rapport d'activité"></iframe>
+  </div>
+</div>
+</div>
+{% endblock %}

@@ -13,7 +13,7 @@ from sqlalchemy import delete, select, update
 
 from app.db import Session
 from app.main import app
-from app.modeles import Client, ExportKsc, Hebdo, Journal, Utilisateur
+from app.modeles import Client, ExportKsc, Hebdo, Utilisateur
 from app.securite import hacher
 
 RACINE = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -95,7 +95,6 @@ def main():
             uid = db.scalar(select(Utilisateur.id).where(Utilisateur.email == EMAIL))
             db.execute(update(Hebdo).where(Hebdo.depose_par_id == uid).values(depose_par_id=None))
             db.execute(update(ExportKsc).where(ExportKsc.depose_par_id == uid).values(depose_par_id=None))
-            db.execute(delete(Journal).where(Journal.utilisateur_id == uid))
             db.execute(delete(Utilisateur).where(Utilisateur.id == uid))
             db.commit()
         print("Compte d'essai supprimé (les dépôts réels de septembre sont conservés).")

@@ -6,6 +6,12 @@
   <p class="sous-titre">Toutes les actions effectuées sur la plateforme : connexions, dépôts, rapports, comptes et clients.</p></div>
   <a class="bouton secondaire" href="/admin/journal.csv{{ '?' ~ params if params }}">Exporter en CSV</a>
 </div>
+<div class="message {{ 'succes' if integrite.ok else 'erreur' }} integrite">
+  <div>{% if integrite.ok %}<strong>Intégrité vérifiée</strong> : les {{ integrite.lignes }} lignes du journal forment une chaîne d'empreintes SHA-256 intacte.
+    <span class="aide mono" title="Empreinte de la dernière ligne : à comparer avec une copie conservée ailleurs">ancre {{ integrite.ancre[:16] }}…</span>
+  {% else %}<strong>Intégrité rompue</strong> à la ligne n° {{ integrite.rupture.id }} : {{ integrite.rupture.raison }}.
+    Le journal a été modifié en dehors de la plateforme.{% endif %}</div>
+</div>
 
 <form method="get" action="/admin/journal" class="carte filtres">
   <div><label for="f-u">Utilisateur</label>
@@ -28,7 +34,7 @@
 <thead><tr><th>Date</th><th>Utilisateur</th><th>Action</th><th>Détail</th></tr></thead>
 <tbody>
 {% for l in lignes %}
-<tr><td class="date">{{ l.quand | fdatetime }}</td><td>{{ l.utilisateur.nom if l.utilisateur else "—" }}</td>
+<tr><td class="date">{{ l.quand | fdatetime }}</td><td>{{ l.utilisateur.nom if l.utilisateur else l.acteur or "—" }}</td>
 <td><span class="etiquette">{{ l.action }}</span></td><td>{{ l.detail }}</td></tr>
 {% else %}<tr><td colspan="4" class="vide">Aucune action {{ "ne correspond à ces filtres" if params else "enregistrée" }}.</td></tr>{% endfor %}
 </tbody>

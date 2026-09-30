@@ -12,7 +12,7 @@ from sqlalchemy import delete, select
 
 from app.db import Session
 from app.main import app
-from app.modeles import Client, Journal, Rapport, Utilisateur
+from app.modeles import Client, Rapport, Utilisateur
 from app.securite import hacher
 
 CHROME = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
@@ -59,7 +59,6 @@ def main(sortie):
         with Session() as db:
             uid = db.scalar(select(Utilisateur.id).where(Utilisateur.email == EMAIL))
             db.execute(delete(Rapport).where(Rapport.cree_par_id == uid))
-            db.execute(delete(Journal).where(Journal.utilisateur_id == uid))
             db.execute(delete(Utilisateur).where(Utilisateur.id == uid))
             db.commit()
 

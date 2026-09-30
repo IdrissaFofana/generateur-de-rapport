@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block titre %}Base de connaissances{% endblock %}
+{% block contenu %}
+<div class="en-tete">
+  <div><div class="surtitre">Service technique</div><h1>Base de connaissances</h1>
+  <p class="sous-titre">Tous les rapports d'intervention validés et importés : recherchez un problème déjà rencontré et la solution appliquée.</p></div>
+</div>
+
+<form method="get" action="/connaissances" class="carte recherche-kb" role="search">
+  <input type="search" name="q" value="{{ q }}" placeholder="ex. ports 445, KSN inaccessible, klmover, GAB…" aria-label="Rechercher" autofocus>
+  <button class="bouton" type="submit">Rechercher</button>
+</form>
+
+{% if resultats is not none %}
+<div class="carte">
+  <div class="titre-carte"><h2>{{ resultats | length }} résultat(s) pour « {{ q }} »</h2></div>
+  {% for r in resultats %}{% set i = r.intervention %}
+  <div class="resultat-kb">
+    <div class="en-ligne" style="justify-content:space-between">
+      <div><a class="client" href="/interventions/{{ i.id }}">{{ i.titre }}</a> <span class="etiquette">{{ i.numero }}</span>
+        {% if i.source == "import" %}<span class="etiquette alerte">importé</span>{% endif %}</div>
+      <span class="aide">{{ i.client.nom }} · {{ i.date_debut | fdate }} · {{ i.intervenants | join(", ") }}</span>
+    </div>
+    {% for e in r.extraits %}<p class="extrait">{{ e | replace("**", "") }}</p>{% endfor %}
+  </div>
+  {% else %}<p class="aide" style="margin:0">Aucune intervention ne contient tous ces mots.</p>{% endfor %}
+</div>
+{% endif %}
+
+<div class="carte">
+  <div class="titre-carte"><h2>Problèmes récurrents</h2><span class="aide">points bloquants rencontrés chez au moins 2 clients</span></div>
+  {% if recurrents %}
+  <div class="tableau"><table class="liste triable">
+    <thead><tr><th data-tri="texte">Problème</th><th data-tri="nombre">Clients</th><th data-tri="nombre">Occurrences</th><th data-tri="texte">Action appliquée</th><th data-tri="texte">Dernière fois</th></tr></thead>
+    <tbody>{% for p in recurrents %}<tr>
+      <td><strong>{{ p.probleme }}</strong></td>
+      <td data-val="{{ p.clients | length }}" title="{{ p.clients | join(', ') }}"><span class="etiquette alerte">{{ p.clients | length }}</span> <span class="aide">{{ p.clients | join(", ") }}</span></td>
+      <td class="date" data-val="{{ p.occurrences }}">{{ p.occurrences }}</td>
+      <td>{{ p.action or "—" }}</td>
+      <td class="date" data-val="{{ p.derniere.isoformat() if p.derniere else '' }}">{{ p.derniere | fdate if p.derniere else "—" }}</td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  <p class="aide" style="margin:10px 0 0">Un problème récurrent justifie une procédure standard ou une recommandation dans la bibliothèque.</p>
+  {% else %}<p class="aide" style="margin:0">Aucun point bloquant commun à plusieurs clients pour l'instant.</p>{% endif %}
+</div>
+{% endblock %}

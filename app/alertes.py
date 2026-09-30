@@ -21,7 +21,7 @@ from html import escape
 from sqlalchemy import func, select
 
 from . import config, parc, services
-from .modeles import ANALYSE_OK, Alerte, Client, Contrat, Envoi, Hebdo
+from .modeles import ANALYSE_OK, Alerte, Client, Envoi, Hebdo
 from .moteur import parc as mparc
 from .moteur.outils import fmt_mois, mois_courant
 
@@ -30,7 +30,9 @@ MOIS_SURVEILLES = 3  # seules les situations récentes déclenchent une alerte (
 TYPES = {
     "risque_critique": "Niveau critique", "hausse_detections": "Hausse des détections", "incident_mdr": "Incident MDR",
     "serveur_critique": "Serveur critique 2 mois", "licences": "Licences", "echeance": "Échéance de contrat",
+    "assistance": "Assistance mensuelle", "certification": "Certification",
 }
+JOUR_RAPPEL_ASSISTANCE = 20  # à partir de ce jour du mois, une assistance non planifiée est signalée
 
 
 # --------------------------------------------------------------------------- #
@@ -123,11 +125,47 @@ def _regles_contrats(db, clients, reference):
     return candidats
 
 
+def _regles_service(db, aujourd_hui=None):
+    """Assistance mensuelle manquée (mois écoulé) ou non réalisée en fin de mois ; certification bientôt expirée."""
+    from . import service_technique as st
+    from .modeles import AssistancePlanifiee, Certification, Utilisateur
+    aujourd_hui = aujourd_hui or date.today()
+    candidats = []
+    precedent = (aujourd_hui.year - 1, 12) if aujourd_hui.month == 1 else (aujourd_hui.year, aujourd_hui.month - 1)
+    for annee, mois in (precedent, (aujourd_hui.year, aujourd_hui.month)):
+        st.assurer_planning(db, annee, mois)
+        courant = (annee, mois) == (aujourd_hui.year, aujourd_hui.month)
+        if courant and aujourd_hui.day < JOUR_RAPPEL_ASSISTANCE:
+            continue
+        for a in db.scalars(select(AssistancePlanifiee).where(AssistancePlanifiee.annee == annee, AssistancePlanifiee.mois == mois,
+                                                              AssistancePlanifiee.statut.in_(("a_planifier", "planifiee")))):
+            libelle = fmt_mois(annee, mois).lower()
+            if courant:
+                cle, niveau = f"assistance-rappel:{a.client_id}:{annee}-{mois:02d}", "avertissement"
+                titre = f"{a.client.nom} : assistance de {libelle} pas encore réalisée"
+            else:
+                cle, niveau = f"assistance-manquee:{a.client_id}:{annee}-{mois:02d}", "critique"
+                titre = f"{a.client.nom} : assistance mensuelle de {libelle} non réalisée"
+            candidats.append(_candidat(cle, a.client, "assistance", niveau, titre,
+                                       "Planifiée le " + a.date_prevue.strftime("%d/%m/%Y") if a.date_prevue else "Aucune date planifiée.",
+                                       f"/assistances?annee={annee}&mois={mois}"))
+    for c in db.scalars(select(Certification).join(Utilisateur).where(
+            Utilisateur.actif.is_(True), Certification.expire_le.is_not(None),
+            Certification.expire_le <= aujourd_hui + timedelta(days=60))):
+        expiree = c.expire_le < aujourd_hui
+        candidats.append(_candidat(
+            f"certification:{c.id}:{c.expire_le.isoformat()}:{'expiree' if expiree else 'bientot'}", None, "certification",
+            "avertissement" if not expiree else "critique",
+            f"{c.utilisateur.nom} : certification « {c.intitule} » " + ("expirée" if expiree else f"expire le {c.expire_le:%d/%m/%Y}"),
+            f"{c.editeur} · à renouveler.", f"/techniciens/{c.utilisateur_id}#certifications"))
+    return candidats
+
+
 def evaluer(db, reference=None):
     """Crée les alertes nouvelles (clé encore inconnue) ; renvoie la liste des alertes créées."""
     reference = reference or mois_courant()
     clients = db.scalars(select(Client).where(Client.actif.is_(True)).order_by(Client.nom)).all()
-    candidats = _regles_incidents(db, clients) + _regles_contrats(db, clients, reference)
+    candidats = _regles_incidents(db, clients) + _regles_contrats(db, clients, reference) + _regles_service(db)
     for c in clients:
         candidats += _regles_rapports(db, c, reference) + _regles_serveurs(db, c, reference)
     connues = set(db.scalars(select(Alerte.cle).where(Alerte.cle.in_([x["cle"] for x in candidats]))))

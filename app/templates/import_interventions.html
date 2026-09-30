@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% from "_macros.html" import zone_depot %}
+{% block titre %}Importer des rapports d'intervention{% endblock %}
+{% block contenu %}
+<a class="retour" href="/interventions">Rapports d'intervention</a>
+<div class="en-tete">
+  <div><div class="surtitre">Historique</div><h1>Importer d'anciens rapports</h1>
+  <p class="sous-titre">Déposez vos anciens rapports d'intervention (PDF ou Word) : le fichier d'origine est conservé, les informations sont
+  extraites automatiquement (client, dates, heures, type, intervenants, objet, actions, points bloquants), puis vous les vérifiez.
+  Une fois confirmés, ils alimentent l'historique des clients, les statistiques et la base de connaissances.</p></div>
+  <span class="etiquette ok">{{ importes }} import(s) confirmé(s)</span>
+</div>
+
+<form method="post" action="/interventions/importer" enctype="multipart/form-data" class="carte">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <label class="depot">
+    <input type="file" name="fichiers" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple required>
+    <span class="icone"><svg viewBox="0 0 24 24"><path d="M12 16V4M6.5 9.5 12 4l5.5 5.5M4 20h16"/></svg></span>
+    <span><strong>Glissez vos rapports PDF ou Word ici, ou cliquez pour les choisir</strong>
+      <span class="aide">Plusieurs fichiers à la fois. Un fichier déjà importé est ignoré.</span><span class="choisis"></span></span>
+  </label>
+  <div class="en-ligne" style="margin-top:14px;align-items:end">
+    <div><label for="cd">Client par défaut <span class="aide">— si le document ne permet pas de le reconnaître</span></label>
+      <select id="cd" name="client_defaut" style="width:auto"><option value="">Reconnaître automatiquement</option>
+        {% for c in clients %}<option value="{{ c.id }}">{{ c.nom }}</option>{% endfor %}</select></div>
+    <button class="bouton" type="submit">Importer</button>
+  </div>
+</form>
+
+<div class="carte">
+  <div class="titre-carte"><h2>À vérifier</h2><span class="aide">{{ a_verifier | length }} rapport(s)</span></div>
+  {% if a_verifier %}
+  <div class="tableau"><table class="liste">
+    <thead><tr><th>N°</th><th>Fichier d'origine</th><th>Client</th><th>Type</th><th>Date</th><th>Extrait</th><th></th></tr></thead>
+    <tbody>{% for i in a_verifier %}<tr>
+      <td class="date">{{ i.numero }}</td>
+      <td><a class="fichier" href="/interventions/{{ i.id }}/original">{{ i.nom_fichier_source }}</a></td>
+      <td class="client">{{ i.client.nom }}</td><td>{{ i.libelle_type }}</td><td class="date">{{ i.date_debut | fdate }}</td>
+      <td class="aide">{{ i.resultat | length }} action(s) · {{ i.points_bloquants | length }} point(s) bloquant(s)</td>
+      <td class="fin"><a class="bouton petit fleche" href="/interventions/{{ i.id }}">Vérifier</a></td>
+    </tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="aide" style="margin:0">Aucun rapport importé en attente de vérification.</p>{% endif %}
+</div>
+{% endblock %}

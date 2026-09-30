@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block titre %}Rapports d'activité du service{% endblock %}
+{% block contenu %}
+{% set url = "/service?periodicite=" ~ periodicite %}
+{% set pa, pn = (annee - 1, nb_periodes) if numero == 1 else (annee, numero - 1) %}
+{% set sa, sn = (annee + 1, 1) if numero == nb_periodes else (annee, numero + 1) %}
+<div class="en-tete">
+  <div><div class="surtitre">Service technique</div><h1>Rapport d'activité</h1>
+  <p class="sous-titre">Consolidé automatiquement : interventions, assistances mensuelles, activité par client et par technicien, faits marquants,
+  incidents, problèmes récurrents, formations et certifications, activités internes. Textes relus puis PDF archivé.</p></div>
+</div>
+
+<div class="barre-filtres" style="margin-top:0">
+  <div class="segments">{% for cle in PERIODICITES %}<a href="/service?periodicite={{ cle }}" class="{{ 'actif' if periodicite == cle }}">{{ {"mensuel": "Mois", "trimestriel": "Trimestre", "semestriel": "Semestre", "annuel": "Année"}[cle] }}</a>{% endfor %}</div>
+  <div class="periode">
+    <a href="{{ url }}&annee={{ pa }}&numero={{ pn }}" aria-label="Période précédente">‹</a>
+    <span class="libelle-periode">{{ libelle }}</span>
+    <a href="{{ url }}&annee={{ sa }}&numero={{ sn }}" aria-label="Période suivante">›</a>
+  </div>
+  {% if utilisateur.peut("validateur") %}
+    {% if existant %}<a class="bouton fleche" href="/service/{{ existant.id }}">Ouvrir le rapport (v{{ existant.version }}, {{ "validé" if existant.statut == "valide" else "brouillon" }})</a>
+    {% else %}<form method="post" action="/service"><input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="hidden" name="periodicite" value="{{ periodicite }}"><input type="hidden" name="annee" value="{{ annee }}"><input type="hidden" name="numero" value="{{ numero }}">
+      <button class="bouton fleche" type="submit">Créer le rapport — {{ libelle }}</button></form>{% endif %}
+  {% endif %}
+</div>
+
+<div class="tableau">
+<table class="liste">
+<thead><tr><th>Période</th><th>Type</th><th>Version</th><th>État</th><th>Interventions</th><th>Assistances</th><th></th></tr></thead>
+<tbody>
+{% for r in rapports %}{% set ch = r.donnees.chiffres %}
+<tr>
+  <td class="client">{{ libelle_court(r.periodicite, r.annee, r.numero) }}</td>
+  <td class="aide">{{ r.periodicite }}</td>
+  <td><span class="etiquette">v{{ r.version }}</span></td>
+  <td><span class="pastille {{ 'ok' if r.statut == 'valide' else 'cours' }}">{{ "Validé" if r.statut == "valide" else "Brouillon" }}</span></td>
+  <td class="date">{{ ch.interventions }}</td>
+  <td class="date">{{ ch.assistances_realisees }}/{{ ch.assistances_dues }}</td>
+  <td class="fin"><a class="bouton petit secondaire fleche" href="/service/{{ r.id }}">Ouvrir</a></td>
+</tr>
+{% else %}<tr><td colspan="7" class="vide">Aucun rapport d'activité pour l'instant.</td></tr>{% endfor %}
+</tbody>
+</table>
+</div>
+{% endblock %}

@@ -5,7 +5,13 @@
   <div><div class="surtitre">{{ utilisateur.libelle_role }}</div><h1>{{ utilisateur.nom }}</h1>
   <p class="sous-titre mono">{{ utilisateur.email }}</p></div>
 </div>
-<div class="carte" style="max-width:500px">
+
+{% if exige_2fa and not utilisateur.totp_actif and not utilisateur.doit_changer_mdp %}
+<div class="message info"><div>La double authentification est obligatoire pour votre rôle : activez-la ci-dessous pour accéder à la plateforme.</div></div>
+{% endif %}
+
+<div class="grille-2">
+<div class="carte">
   <div class="titre-carte"><h2>Changer mon mot de passe</h2></div>
   {% if utilisateur.doit_changer_mdp %}
   <div class="message info"><div>Vous utilisez un mot de passe provisoire : choisissez votre propre mot de passe pour continuer.</div></div>
@@ -18,6 +24,49 @@
       <input type="password" name="nouveau" required minlength="10" autocomplete="new-password"></div>
     <div class="champ"><label>Confirmation</label><input type="password" name="confirmation" required autocomplete="new-password"></div>
     <button class="bouton" type="submit">Enregistrer</button>
+    <p class="aide" style="margin:10px 0 0">Changer de mot de passe ferme vos sessions ouvertes sur d'autres postes.</p>
   </form>
+</div>
+
+<div class="carte" id="double-authentification">
+  <div class="titre-carte"><h2>Double authentification</h2></div>
+  {% if utilisateur.totp_actif %}
+    <div class="etat-2fa"><span class="pastille ok">Activée</span><span class="aide">Un code à 6 chiffres est demandé à chaque connexion.</span></div>
+    {% if not exige_2fa %}
+    <details><summary class="aide" style="cursor:pointer">Désactiver</summary>
+      <form method="post" action="/mon-compte/2fa/desactiver" style="margin-top:12px">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <div class="grille">
+          <div class="champ"><label>Mot de passe</label><input type="password" name="mot_de_passe" required autocomplete="current-password"></div>
+          <div class="champ"><label>Code actuel</label><input type="text" name="code" inputmode="numeric" maxlength="7" required autocomplete="one-time-code"></div>
+        </div>
+        <button class="bouton petit danger" type="submit">Désactiver la double authentification</button>
+      </form>
+    </details>
+    {% else %}<p class="aide" style="margin:0">Obligatoire pour votre rôle. Téléphone perdu : demandez une réinitialisation à un administrateur.</p>{% endif %}
+  {% elif qr %}
+    <ol class="aide" style="padding-left:18px;margin:0 0 6px">
+      <li>Ouvrez votre application d'authentification (Microsoft Authenticator, Google Authenticator, FreeOTP…).</li>
+      <li>Scannez le QR code, ou saisissez la clé à la main.</li>
+      <li>Saisissez le code à 6 chiffres affiché pour confirmer.</li>
+    </ol>
+    <div class="qr-2fa">
+      <div class="qr">{{ qr | safe }}</div>
+      <div><label>Clé (saisie manuelle)</label><div class="cle-2fa">{{ cle }}</div>
+        <form method="post" action="/mon-compte/2fa/activer" style="margin-top:14px">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <div class="champ"><label for="code">Code affiché</label>
+            <input type="text" id="code" name="code" class="saisie-code" inputmode="numeric" maxlength="7" required autocomplete="one-time-code"></div>
+          <button class="bouton valider" type="submit">Activer</button>
+        </form></div>
+    </div>
+  {% else %}
+    <div class="etat-2fa"><span class="pastille attente">Désactivée</span></div>
+    <p class="aide">Protège votre compte même si votre mot de passe est dérobé : un code temporaire, généré par une application
+    sur votre téléphone, est demandé à chaque connexion. Aucun service externe n'est utilisé.</p>
+    <form method="post" action="/mon-compte/2fa/preparer"><input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="bouton" type="submit">Activer la double authentification</button></form>
+  {% endif %}
+</div>
 </div>
 {% endblock %}

@@ -10,7 +10,7 @@ from sqlalchemy import delete, func, select
 
 from app.db import Session
 from app.main import app
-from app.modeles import Alerte, Client, Journal, Rapport, Utilisateur
+from app.modeles import Alerte, Client, Rapport, Utilisateur
 from app.securite import hacher
 from app.stockage import supprimer
 
@@ -143,7 +143,6 @@ def main():
                 db.delete(r)
             ids = db.scalars(select(Utilisateur.id).where(Utilisateur.email.like(f"{PREFIXE}%"))).all()
             db.execute(delete(Alerte).where(Alerte.id > alerte_max))
-            db.execute(delete(Journal).where(Journal.utilisateur_id.in_(ids)))
             db.execute(delete(Utilisateur).where(Utilisateur.id.in_(ids)))
             db.commit()
         print("Comptes et rapports d'essai supprimés.")

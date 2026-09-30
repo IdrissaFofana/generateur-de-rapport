@@ -294,3 +294,19 @@ def html_intervention(intervention, prestataire):
         i=intervention, presta=prestataire, MODES=MODES_INTERVENTION, date_rapport=jour.isoformat(),
         css=open(os.path.join(ICI, "gabarits", "rapport.css"), encoding="utf-8").read(),
     )
+
+
+# --------------------------------------------------------------------------- #
+# Rapport d'activité du service technique
+# --------------------------------------------------------------------------- #
+def html_service(d, contenu, prestataire, date_rapport=None):
+    g = {}
+    if any(m["interventions"] for m in d["par_mois"]) and len(d["par_mois"]) > 1:
+        g["mois"] = graphiques.barres_mensuelles([m["libelle"] for m in d["par_mois"]], [m["interventions"] for m in d["par_mois"]],
+                                                 "Interventions")
+    if d["par_type"]:
+        g["types"] = graphiques.barres_horizontales(list(d["par_type"].items()))
+    return _env.get_template("service.html").render(
+        d=d, c=contenu, presta=prestataire, graphiques=g, date_rapport=(date_rapport or date.today()).isoformat(),
+        css=open(os.path.join(ICI, "gabarits", "rapport.css"), encoding="utf-8").read(),
+    )

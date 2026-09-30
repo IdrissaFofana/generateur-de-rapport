@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block titre %}{{ t.nom }} — fiche technicien{% endblock %}
+{% block contenu %}
+<a class="retour" href="/techniciens">Techniciens</a>
+<div class="en-tete">
+  <div><div class="surtitre">{{ t.libelle_role }}</div><h1>{{ t.nom }}</h1>
+  <p class="sous-titre mono">{{ t.email }}</p></div>
+</div>
+
+<div class="indicateurs">
+  <div class="indicateur marine"><div class="valeur">{{ stats.interventions if stats else 0 }}</div><div class="libelle">Interventions {{ annee }}</div></div>
+  <div class="indicateur"><div class="valeur">{{ (stats.heures if stats else 0) | string | replace(".", ",") }}</div><div class="libelle">Heures de présence</div></div>
+  <div class="indicateur"><div class="valeur">{{ stats.clients if stats else 0 }}</div><div class="libelle">Clients accompagnés</div></div>
+  <div class="indicateur ok"><div class="valeur">{{ certifications | length }}</div><div class="libelle">Certifications</div></div>
+  <div class="indicateur cours"><div class="valeur">{{ formations | length }}</div><div class="libelle">Formations</div></div>
+</div>
+
+<div class="grille-2">
+<div class="carte" id="certifications">
+  <div class="titre-carte"><h2>Certifications</h2></div>
+  {% for c in certifications %}{% set cle, lib = etat_certif(c) %}
+  <div class="certif {{ cle }}">
+    <div class="sceau">{{ c.editeur[:3] | upper }}</div>
+    <div><strong>{{ c.intitule }}</strong>
+      <div class="aide">{{ c.editeur }}{% if c.numero %} · n° <span class="mono">{{ c.numero }}</span>{% endif %} · obtenue le {{ c.obtenue_le | fdate }}</div>
+      <span class="etiquette {{ {'valide': 'ok', 'bientot': 'alerte', 'expiree': 'erreur'}[cle] }}">{{ lib }}</span>
+      {% if c.fichier %}<a class="fichier" href="/certifications/{{ c.id }}/fichier" style="margin-left:8px;font-size:.84rem">{{ c.nom_fichier }}</a>{% endif %}</div>
+    {% if modifiable %}<form method="post" action="/certifications/{{ c.id }}/supprimer" onsubmit="return confirm('Supprimer cette certification et son justificatif ?')">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><button class="bouton petit danger" type="submit">Supprimer</button></form>{% endif %}
+  </div>
+  {% else %}<p class="aide">Aucune certification enregistrée.</p>{% endfor %}
+  {% if modifiable %}
+  <form method="post" action="/techniciens/{{ t.id }}/certifications" enctype="multipart/form-data" class="contrat nouveau" style="margin-top:14px">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="intitule-nouveau">Ajouter une certification</div>
+    <div class="grille" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr))">
+      <div class="champ"><label>Intitulé</label><input type="text" name="intitule" required placeholder="ex. Kaspersky Endpoint Security Professional"></div>
+      <div class="champ"><label>Éditeur</label><input type="text" name="editeur" value="Kaspersky" list="editeurs"></div>
+      <div class="champ"><label>N° / identifiant</label><input type="text" name="numero"></div>
+      <div class="champ"><label>Obtenue le</label><input type="date" name="obtenue_le" required></div>
+      <div class="champ"><label>Expire le <span class="aide">— facultatif</span></label><input type="date" name="expire_le"></div>
+    </div>
+    <label class="depot" style="padding:12px 14px">
+      <input type="file" name="justificatif" accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg">
+      <span class="icone"><svg viewBox="0 0 24 24"><path d="M12 16V4M6.5 9.5 12 4l5.5 5.5M4 20h16"/></svg></span>
+      <span><strong>Justificatif (PDF ou image, 10 Mo max.)</strong><span class="aide">Facultatif</span><span class="choisis"></span></span>
+    </label>
+    <datalist id="editeurs"><option value="Kaspersky"><option value="Microsoft"><option value="Cisco"><option value="Fortinet"><option value="CompTIA"><option value="ISC2"></datalist>
+    <div style="margin-top:10px"><button class="bouton petit" type="submit">+ Ajouter la certification</button></div>
+  </form>
+  {% endif %}
+</div>
+
+<div class="carte" id="parcours">
+  <div class="titre-carte"><h2>Parcours de formation</h2></div>
+  {% for f in formations %}
+  <form method="post" action="/formations/{{ f.id }}" class="contrat">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <fieldset {{ 'disabled' if not modifiable }}>
+    <div class="grille" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr))">
+      <div class="champ"><label>Formation</label><input type="text" name="intitule" value="{{ f.intitule }}" required></div>
+      <div class="champ"><label>Organisme</label><input type="text" name="organisme" value="{{ f.organisme }}"></div>
+      <div class="champ"><label>Statut</label><select name="statut">{% for s in STATUTS %}<option {{ 'selected' if f.statut == s }}>{{ s }}</option>{% endfor %}</select></div>
+      <div class="champ"><label>Début</label><input type="date" name="debut" value="{{ f.debut.isoformat() if f.debut else '' }}"></div>
+      <div class="champ"><label>Fin</label><input type="date" name="fin" value="{{ f.fin.isoformat() if f.fin else '' }}"></div>
+      <div class="champ"><label>Heures</label><input type="text" name="heures" value="{{ f.heures or '' }}" inputmode="numeric"></div>
+    </div>
+    <input type="hidden" name="notes" value="{{ f.notes }}">
+    </fieldset>
+    {% if modifiable %}<div class="en-ligne"><button class="bouton petit" type="submit">Enregistrer</button>
+      <button class="bouton petit danger" type="submit" formaction="/formations/{{ f.id }}/supprimer" onclick="return confirm('Supprimer cette formation ?')">Supprimer</button></div>{% endif %}
+  </form>
+  {% else %}<p class="aide">Aucune formation enregistrée.</p>{% endfor %}
+  {% if modifiable %}
+  <form method="post" action="/techniciens/{{ t.id }}/formations" class="contrat nouveau">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="intitule-nouveau">Ajouter une formation</div>
+    <div class="grille" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr))">
+      <div class="champ"><label>Formation</label><input type="text" name="intitule" required placeholder="ex. KL 002.12 — Kaspersky Security Center"></div>
+      <div class="champ"><label>Organisme</label><input type="text" name="organisme" placeholder="ex. Kaspersky Academy"></div>
+      <div class="champ"><label>Statut</label><select name="statut">{% for s in STATUTS %}<option {{ 'selected' if s == 'Terminée' }}>{{ s }}</option>{% endfor %}</select></div>
+      <div class="champ"><label>Début</label><input type="date" name="debut"></div>
+      <div class="champ"><label>Fin</label><input type="date" name="fin"></div>
+      <div class="champ"><label>Heures</label><input type="text" name="heures" inputmode="numeric"></div>
+    </div>
+    <button class="bouton petit" type="submit">+ Ajouter la formation</button>
+  </form>
+  {% endif %}
+</div>
+</div>
+
+<div class="carte" style="margin-top:20px">
+  <div class="titre-carte"><h2>Dernières interventions</h2></div>
+  {% if interventions %}<div class="tableau"><table class="liste">
+    <thead><tr><th>N°</th><th>Client</th><th>Type</th><th>Date</th><th>Statut global</th></tr></thead>
+    <tbody>{% for i in interventions %}<tr><td class="date"><a href="/interventions/{{ i.id }}">{{ i.numero }}</a></td><td class="client">{{ i.client.nom }}</td>
+      <td>{{ i.libelle_type }}</td><td class="date">{{ i.date_debut | fdate }}</td>
+      <td><span class="pastille {{ {'OK': 'ok', 'Partiel': 'alerte', 'Échec': 'erreur'}.get(i.statut_global) }}">{{ i.statut_global }}</span></td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% else %}<p class="aide" style="margin:0">Aucune intervention validée où {{ t.nom }} figure parmi les intervenants.</p>{% endif %}
+</div>
+{% endblock %}

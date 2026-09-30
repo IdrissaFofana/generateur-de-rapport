@@ -13,7 +13,7 @@ from sqlalchemy import delete, select
 from app import alertes, config, services
 from app.db import Session
 from app.main import app
-from app.modeles import Client, ElementBibliotheque, Intervention, Journal, Rapport, Utilisateur
+from app.modeles import Client, ElementBibliotheque, Intervention, Rapport, Utilisateur
 from app.securite import hacher
 from app.stockage import supprimer
 
@@ -189,7 +189,6 @@ def main():
                 db.delete(r)
             client = db.get(Client, hudson.id)
             client.code, client.emails_rapports = code_initial, emails_initiaux
-            db.execute(delete(Journal).where(Journal.utilisateur_id.in_(ids)))
             db.execute(delete(Utilisateur).where(Utilisateur.id.in_(ids)))
             db.commit()
         print("Données d'essai supprimées.")

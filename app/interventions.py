@@ -144,3 +144,49 @@ def actions_pour_plan(db, client_id, annee, mois):
                                 + (f" — {p['impact']}" if p.get("impact") else ""),
                                 "priorite": "Haute", "responsable": p.get("responsable") or PRESTATAIRE["nom"], "statut": "À faire"})
     return actions
+
+
+# --------------------------------------------------------------------------- #
+# Import d'anciens rapports (PDF / Word) : fichier conservé, champs extraits, vérification humaine
+# --------------------------------------------------------------------------- #
+def importer(db, contenu, extension, nom_fichier_origine, utilisateur, client_defaut=None):
+    """Crée une intervention « à vérifier » à partir d'un ancien rapport. Lève ValueError si le client est introuvable."""
+    from .moteur.import_intervention import analyser, extraire_texte
+    from .modeles import Client, Utilisateur
+    from .stockage import empreinte, enregistrer
+    h = empreinte(contenu)
+    doublon = db.scalar(select(Intervention).where(Intervention.fichier_source.like(f"%{h}%")))
+    if doublon is not None:
+        raise ValueError(f"déjà importé ({doublon.numero})")
+    texte = extraire_texte(contenu, extension)
+    clients = [(c.id, c.nom, c.code_rapport, c.tenants_mdr) for c in db.scalars(select(Client))]
+    noms = db.scalars(select(Utilisateur.nom)).all()
+    champs = analyser(texte, clients, noms)
+    client = db.get(Client, champs["client_id"] or client_defaut) if (champs["client_id"] or client_defaut) else None
+    if client is None:
+        raise ValueError("client non reconnu dans le document : choisissez un client par défaut")
+    jour = champs["date_debut"] or date.today()
+    intervention = creer(db, client, champs["type"] or "assistance", utilisateur, jour)
+    chemin, _ = enregistrer(contenu, "interventions", "import", str(client.id), extension=extension)
+    intervention.source, intervention.a_verifier = "import", True
+    intervention.fichier_source, intervention.nom_fichier_source = chemin, nom_fichier_origine[:300]
+    intervention.texte_source = texte
+    intervention.date_fin = champs["date_fin"] or jour
+    intervention.heure_debut, intervention.heure_fin = champs["heure_debut"], champs["heure_fin"]
+    intervention.intervenants = champs["intervenants"] or []
+    intervention.objet = champs["objet"]
+    intervention.contexte = {**intervention.contexte, "autres": champs["contexte"][:500]} if champs["contexte"] else {
+        "postes": "", "serveurs": "", "systemes": "", "version_ksc": "", "autres": ""}
+    intervention.resultat = champs["resultat"]
+    intervention.statut_global = champs["statut_global"] or "OK"
+    intervention.points_bloquants = champs["points_bloquants"]
+    intervention.recommandations = champs["recommandations"]
+    return intervention, champs["manquants"]
+
+
+def confirmer_import(db, intervention, utilisateur):
+    """Import vérifié : le rapport est archivé tel quel (le fichier d'origine reste la référence)."""
+    intervention.statut, intervention.a_verifier = VALIDE, False
+    intervention.valide_par_id, intervention.valide_le = utilisateur.id, datetime.now()
+    if (intervention.fichier_source or "").endswith(".pdf"):
+        intervention.pdf = intervention.fichier_source

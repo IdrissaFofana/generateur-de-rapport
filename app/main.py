@@ -18,7 +18,7 @@ from .config import COOKIE_SECURISE, PORT, SECRET_KEY, STOCKAGE_DIR
 from . import alertes
 from .db import Session, migrer
 from .securite import NonConnecte
-from .web import admin, auth, bilans, depots, interventions, pilotage, rapports, tableau
+from .web import admin, auth, bilans, depots, interventions, pilotage, rapports, service, tableau
 from .web.commun import page, rediriger
 
 
@@ -46,13 +46,14 @@ app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, session_cookie="rap
                    max_age=12 * 3600, same_site="lax", https_only=COOKIE_SECURISE)
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
 
-for module in (auth, pilotage, tableau, depots, rapports, bilans, interventions, admin):
+for module in (auth, pilotage, tableau, depots, rapports, bilans, interventions, service, admin):
     app.include_router(module.routes)
 
 
 @app.exception_handler(NonConnecte)
 def non_connecte(request: Request, exc: NonConnecte):
-    return rediriger("/mon-compte" if exc.args and exc.args[0] == "changer_mdp" else "/connexion")
+    # Compte à régulariser (mot de passe provisoire, double authentification obligatoire) : page « Mon compte »
+    return rediriger("/mon-compte" if exc.args and exc.args[0] in ("changer_mdp", "activer_2fa") else "/connexion")
 
 
 @app.exception_handler(HTTPException)

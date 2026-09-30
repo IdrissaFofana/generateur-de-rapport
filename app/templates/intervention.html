@@ -68,8 +68,9 @@
 </div>
 <div class="colonne-apercu">
   <div class="apercu-cadre">
-    <div class="barre-apercu"><strong>{{ i.numero }}</strong><a href="/interventions/{{ i.id }}/pdf">Télécharger ↓</a></div>
-    <iframe src="/interventions/{{ i.id }}/pdf#view=FitH" title="Rapport d'intervention"></iframe>
+    <div class="barre-apercu"><strong>{{ i.numero }}{% if i.source == "import" %} · importé{% endif %}</strong><a href="/interventions/{{ i.id }}/pdf">Télécharger ↓</a></div>
+    {% if i.pdf %}<iframe src="/interventions/{{ i.id }}/pdf#view=FitH" title="Rapport d'intervention"></iframe>
+    {% else %}<div class="texte-source" style="max-height:calc(100vh - 80px);border-radius:0">{{ i.texte_source }}</div>{% endif %}
   </div>
 </div>
 </div>
@@ -77,6 +78,21 @@
 {% else %}
 {# ============================== Saisie ============================== #}
 {% if not modifiable %}<div class="message info"><div>Brouillon en cours de rédaction : lecture seule pour votre rôle.</div></div>{% endif %}
+{% if i.source == "import" and modifiable %}
+<div class="carte bandeau-import">
+  <div class="titre-carte"><h2>Rapport importé à vérifier</h2>
+    <a class="fichier" href="/interventions/{{ i.id }}/original">{{ i.nom_fichier_source }}</a></div>
+  <p class="aide" style="margin-top:-4px">Les champs ci-dessous ont été extraits automatiquement du document d'origine : corrigez-les si besoin
+  (client, type, dates, intervenants, actions), enregistrez, puis confirmez. Le document d'origine reste la référence.</p>
+  <div class="en-ligne">
+    <form method="post" action="/interventions/{{ i.id }}/confirmer-import" onsubmit="return confirm('Confirmer ce rapport importé ? Pensez à enregistrer vos corrections avant.')">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><button class="bouton valider" type="submit">Confirmer l'import</button></form>
+    <span class="aide">ou « Générer le rapport » en haut de page pour le reproduire au format ESAY.</span>
+  </div>
+  <details style="margin-top:12px"><summary class="aide" style="cursor:pointer">Texte extrait du document</summary>
+    <div class="texte-source" style="margin-top:8px">{{ i.texte_source }}</div></details>
+</div>
+{% endif %}
 <div class="saisie-ri">
 <form method="post" action="/interventions/{{ i.id }}" id="formulaire" class="colonne-formulaire">
 <input type="hidden" name="csrf" value="{{ csrf }}">

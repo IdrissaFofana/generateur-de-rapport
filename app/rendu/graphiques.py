@@ -162,6 +162,39 @@ def vulnerabilites_applis(v, fmt="svg", maxi=8):
     return _exporter(fig, fmt)
 
 
+def barres_mensuelles(libelles, valeurs, etiquette, fmt="svg"):
+    """Barres verticales (une par mois), valeur au-dessus de chaque barre non nulle."""
+    fig, ax = plt.subplots(figsize=(7.2, 2.3))
+    x = list(range(len(libelles)))
+    ax.bar(x, valeurs, color=SERIE, width=0.6 if len(x) > 3 else 0.4, edgecolor="white", linewidth=0.8, zorder=2)
+    haut = max(valeurs) if valeurs and max(valeurs) else 1
+    for xi, v in zip(x, valeurs):
+        if v:
+            ax.text(xi, v + haut * 0.03, f"{v:g}".replace(".", ","), ha="center", va="bottom", fontsize=8, color=ENCRE)
+    ax.set_xticks(x)
+    ax.set_xticklabels(libelles, fontsize=8)
+    ax.set_ylim(0, haut * 1.2)
+    ax.yaxis.set_major_locator(MaxNLocator(nbins=4, integer=True))
+    ax.yaxis.grid(True, color=GRILLE, linewidth=0.8)
+    ax.set_axisbelow(True)
+    ax.tick_params(axis="both", length=0)
+    ax.set_ylabel(etiquette)
+    return _exporter(fig, fmt)
+
+
+def barres_horizontales(paires, fmt="svg"):
+    """Classement horizontal [(libellé, valeur)], du plus grand au plus petit."""
+    libelles, valeurs = [p[0] for p in paires], [p[1] for p in paires]
+    fig, ax = plt.subplots(figsize=(7.2, 0.45 + 0.32 * len(paires)))
+    pos = _barres_classement(ax, libelles, valeurs)
+    ax.barh(pos, valeurs, color=SERIE, height=0.6, edgecolor="white")
+    maxi = max(valeurs) if valeurs else 1
+    for p_, v in zip(pos, valeurs):
+        ax.text(v + maxi * 0.01, p_, f"{v:g}".replace(".", ","), va="center", fontsize=8, color=ENCRE)
+    ax.set_xlim(0, maxi * 1.12)
+    return _exporter(fig, fmt)
+
+
 def evolution(points, indicateurs, fmt="svg"):
     """Petits multiples : une courbe par indicateur (échelles indépendantes, jamais de double axe).
     points : [{"libelle", "indicateurs"}] du plus ancien au plus récent · indicateurs : [(clé, titre)]."""
