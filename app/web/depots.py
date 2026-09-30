@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as SessionDB
 
 from .. import analyses, services
+from ..rendu import courbes
 from ..db import session_db
 from ..modeles import Client, ExportKsc, Hebdo, Rapport, journaliser
 from ..moteur.outils import bornes_mois
@@ -120,6 +121,16 @@ def _contexte_client(db, client, annee, mois):
             "en_cours": any(e.statut in ("en_attente", "en_cours") for e in exports)}
 
 
+def _contexte_evolution(db, client, annee, mois):
+    """Courbes des 12 derniers mois validés, jusqu'au mois affiché inclus."""
+    points = services.historique(db, client.id, annee, mois, nb_mois=12)
+    suivis = [(cle, titre) for cle, titre in services.INDICATEURS_SUIVIS
+              if any(p["indicateurs"].get(cle) is not None for p in points)]
+    return {"historique": points,
+            "courbes": [{"titre": titre, "svg": courbes.mini_courbe(points, cle), "variation": courbes.variation(points, cle)}
+                        for cle, titre in suivis]}
+
+
 @routes.get("/clients/{cid}/aller")
 def aller(cid: int, annee: int, mois: int, u=Depends(lecteur)):
     _mois_valide(annee, mois)
@@ -130,7 +141,9 @@ def aller(cid: int, annee: int, mois: int, u=Depends(lecteur)):
 def fiche_mois(request: Request, cid: int, annee: int, mois: int, u=Depends(lecteur),
                db: SessionDB = Depends(session_db)):
     _mois_valide(annee, mois)
-    return page(request, "client_mois.html", u, **_contexte_client(db, _client(db, cid), annee, mois))
+    client = _client(db, cid)
+    return page(request, "client_mois.html", u, **_contexte_client(db, client, annee, mois),
+                **_contexte_evolution(db, client, annee, mois))
 
 
 @routes.get("/clients/{cid}/{annee}/{mois}/exports")

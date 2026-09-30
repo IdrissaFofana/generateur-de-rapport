@@ -86,6 +86,47 @@ sudo chown -R www-data /srv/rapports-esay/donnees
 sudo systemctl daemon-reload && sudo systemctl enable --now rapports-esay
 ```
 
+### Tâches planifiées : alertes quotidiennes et résumé hebdomadaire
+
+`/etc/systemd/system/rapports-esay-alertes.service` et `.timer` (chaque jour à 7 h) :
+
+```ini
+# rapports-esay-alertes.service
+[Unit]
+Description=Rapports ESAY : évaluation des alertes
+[Service]
+Type=oneshot
+User=www-data
+WorkingDirectory=/srv/rapports-esay
+ExecStart=/srv/rapports-esay/.venv/bin/python gerer.py alertes
+
+# rapports-esay-alertes.timer
+[Unit]
+Description=Rapports ESAY : alertes chaque jour
+[Timer]
+OnCalendar=*-*-* 07:00
+Persistent=true
+[Install]
+WantedBy=timers.target
+```
+
+Même principe pour le résumé du lundi : `rapports-esay-resume.service` avec
+`ExecStart=… gerer.py resume-hebdo` et un timer `OnCalendar=Mon *-*-* 08:00`.
+Le résumé n'est envoyé qu'une fois par semaine, même si la tâche est relancée.
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now rapports-esay-alertes.timer rapports-esay-resume.timer
+systemctl list-timers | grep rapports     # prochaine exécution
+```
+
+### Notifications (facultatif)
+
+Dans `.env` (voir `.env.example`) : `SMTP_HOTE`, `SMTP_PORT`, `SMTP_SECURITE`, `SMTP_UTILISATEUR`, `SMTP_MOT_DE_PASSE`,
+`SMTP_EXPEDITEUR`, `ALERTES_EMAILS`, `RESUME_EMAILS`, et `URL_PLATEFORME` pour les liens des messages.
+Teams : `TEAMS_WEBHOOK` = URL d'un workflow Teams « Lorsqu'une requête webhook est reçue » (le serveur doit pouvoir
+sortir sur internet). Vérifier ensuite dans la page **Alertes** → « Envoyer un message d'essai ».
+
 ## 7. Nginx
 
 ```nginx
@@ -122,5 +163,12 @@ Remplacer les fichiers (sans toucher à `.env` ni à `donnees/`), puis :
 sudo systemctl restart rapports-esay
 ```
 
-Les tables sont créées automatiquement au démarrage. En cas de changement de structure d'une
-table existante, une instruction de migration sera fournie avec la mise à jour.
+Les **migrations de la base sont appliquées automatiquement au démarrage** (Alembic, dossier `migrations/`) :
+aucune commande SQL à passer. Pour les appliquer ou vérifier sans redémarrer :
+
+```bash
+.venv/bin/python gerer.py init              # applique les migrations en attente
+.venv/bin/python -m alembic current         # révision actuelle de la base
+```
+
+Comme toujours, sauvegarder la base avant une mise à jour (voir § 8).

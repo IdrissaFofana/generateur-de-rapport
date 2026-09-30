@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% from "_macros.html" import selecteur_mois %}
-{% block titre %}Tableau de bord{% endblock %}
+{% block titre %}Production {{ fmt_mois(annee, mois) }}{% endblock %}
 {% block contenu %}
 <div class="en-tete">
   <div><div class="surtitre">Production mensuelle</div>
   <h1>{{ fmt_mois(annee, mois) | capitalize }}</h1>
   <p class="sous-titre">État des données reçues et des rapports de chaque client pour le mois.</p></div>
-  {{ selecteur_mois("/", annee, mois) }}
+  {{ selecteur_mois("/production", annee, mois) }}
 </div>
 {% include "_tableau_liste.html" %}
 <div class="legende">

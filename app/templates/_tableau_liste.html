@@ -12,6 +12,30 @@
   <div class="indicateur alerte"><div class="valeur">{{ compte.get("Partiel", 0) + compte.get("Incomplet", 0) }}</div><div class="libelle">Données manquantes</div></div>
 </div>
 
+{% set prets, partiels = compte.get("Prêt", 0), compte.get("Partiel", 0) %}
+{% set brouillons, valides = compte.get("Brouillon", 0), compte.get("Validé", 0) %}
+{% if utilisateur.peut("operateur") or valides %}
+<div class="actions-groupees">
+  <span class="intitule">Actions groupées</span>
+  {% if utilisateur.peut("operateur") %}
+  <form method="post" action="/tableau/brouillons" class="en-ligne"
+        onsubmit="return confirm('Créer les brouillons de tous les clients éligibles pour {{ fmt_mois(annee, mois) }} ?')">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="annee" value="{{ annee }}"><input type="hidden" name="mois" value="{{ mois }}">
+    <button class="bouton petit" type="submit" {{ 'disabled' if not (prets or partiels) }}>Créer les brouillons prêts <span class="compteur">{{ prets }}</span></button>
+    {% if partiels %}<label class="case simple aide"><input type="checkbox" name="partiels" value="true"> inclure les {{ partiels }} partiel(s)</label>{% endif %}
+  </form>
+  <form method="post" action="/tableau/actualiser">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="annee" value="{{ annee }}"><input type="hidden" name="mois" value="{{ mois }}">
+    <button class="bouton petit secondaire" type="submit" {{ 'disabled' if not brouillons }}
+            title="Recalcule les chiffres de tous les brouillons à partir des fichiers déposés (textes conservés)">Actualiser les brouillons <span class="compteur">{{ brouillons }}</span></button>
+  </form>
+  {% endif %}
+  {% if valides %}
+  <a class="bouton petit secondaire" href="/tableau/pdf-valides.zip?annee={{ annee }}&mois={{ mois }}">Télécharger les PDF validés <span class="compteur">{{ valides }}</span></a>
+  {% endif %}
+</div>
+{% endif %}
+
 <div class="tableau">
 <table class="liste">
 <thead><tr><th>Client</th><th>Données MDR du mois</th><th title="Protection · Menaces · Vulnérabilités">Exports KSC <span style="letter-spacing:.04em">P · M · V</span></th><th>Rapport</th><th></th></tr></thead>

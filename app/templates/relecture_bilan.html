@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block titre %}{{ r.client.nom }} — Bilan {{ libelle }} v{{ r.version }}{% endblock %}
+{% block contenu %}
+{% set t = d.totaux %}
+<a class="retour" href="/bilans?periodicite={{ r.periodicite }}&annee={{ d.annee }}&numero={{ d.numero }}">Bilans {{ libelle }}</a>
+<div class="en-tete">
+  <div>
+    <div class="surtitre">Bilan {{ r.periodicite }} · {{ d.libelle_long }}</div>
+    <h1>{{ r.client.nom }}</h1>
+    <div class="meta">
+      <span class="pastille {{ 'ok' if r.statut == 'valide' else 'cours' }}">{{ "Validé" if r.statut == "valide" else "Brouillon" }}</span>
+      <span class="etiquette">v{{ r.version }}</span>
+      <span class="etiquette">{{ t.mois_couverts }}/{{ t.mois_attendus }} mois validés</span>
+      <span class="aide">Créé le <span class="mono">{{ r.cree_le | fdatetime }}</span>{% if r.cree_par %} par {{ r.cree_par.nom }}{% endif %}
+      {% if r.statut == "valide" %} · validé le <span class="mono">{{ r.valide_le | fdatetime }}</span>{% if r.valide_par %} par {{ r.valide_par.nom }}{% endif %}{% endif %}</span>
+    </div>
+  </div>
+  <div class="en-ligne">
+    {% if r.statut == "valide" %}
+      {% if utilisateur.peut("validateur") and versions[0].id == r.id %}
+      <form method="post" action="/rapports/{{ r.id }}/nouvelle-version"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="bouton secondaire" type="submit">Créer une nouvelle version</button></form>
+      {% endif %}
+      <a class="bouton" href="/rapports/{{ r.id }}/pdf">Télécharger le PDF</a>
+    {% else %}
+      {% if utilisateur.peut("operateur") %}
+      <form method="post" action="/rapports/{{ r.id }}/actualiser" onsubmit="return confirm('Recalculer le bilan à partir des rapports mensuels validés ? Vos textes sont conservés.')">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><button class="bouton secondaire" type="submit">Actualiser les chiffres</button></form>
+      {% endif %}
+      {% if modifiable %}
+      <form method="post" action="/rapports/{{ r.id }}/valider"
+            onsubmit="return confirm('Valider ce bilan ? Le PDF définitif sera généré et le bilan ne pourra plus être modifié (une nouvelle version restera possible).')">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><button class="bouton valider" type="submit">Valider le bilan</button></form>
+      {% endif %}
+    {% endif %}
+  </div>
+</div>
+
+{% if d.avertissements %}
+<div class="message info"><div><strong>À noter</strong><ul>{% for a in d.avertissements %}<li>{{ a }}</li>{% endfor %}</ul></div></div>
+{% endif %}
+
+<div class="relecture">
+<div class="colonne-formulaire">
+{% if not modifiable %}
+  <div class="message info"><div>
+    {% if r.statut == "valide" %}Bilan validé : il n'est plus modifiable.{% else %}Lecture seule : la modification des textes est réservée aux validateurs.{% endif %}
+  </div></div>
+{% endif %}
+
+<div class="carte">
+  <div class="titre-carte"><h2>Mois consolidés</h2></div>
+  <div class="tableau"><table class="liste">
+    <thead><tr><th>Mois</th><th>Risque</th><th title="Appareils en état critique">App. crit.</th><th>Détections</th><th title="Vulnérabilités critiques">Vuln. crit.</th></tr></thead>
+    <tbody>{% for m in d.mois %}<tr class="{{ '' if m.present else 'inactif' }}">
+      <td class="nobr">{% if m.present %}<a href="/rapports/{{ m.rapport_id }}" title="{{ m.libelle }}, version {{ m.version }}">{{ m.court }}</a>{% else %}{{ m.court }} <span class="aide">non validé</span>{% endif %}</td>
+      <td>{{ m.niveau or "—" }}</td>
+      {% for cle in ("appareils_critiques", "detections", "vulnerabilites_critiques") %}
+      <td class="date">{{ m.indicateurs.get(cle) if m.indicateurs.get(cle) is not none else "—" }}</td>{% endfor %}
+    </tr>{% endfor %}</tbody>
+  </table></div>
+</div>
+
+<form method="post" action="/rapports/{{ r.id }}/contenu" id="formulaire">
+<input type="hidden" name="csrf" value="{{ csrf }}">
+<fieldset {{ 'disabled' if not modifiable }}>
+<div class="carte">
+  <div class="titre-carte"><h2><span class="section-num">01</span>Synthèse de la période</h2></div>
+  <div class="grille" style="grid-template-columns: minmax(150px, 190px) minmax(0, 1fr)">
+    <div class="champ"><label>Niveau de risque</label>
+      <select name="niveau_risque">{% for n in NIVEAUX %}<option {{ 'selected' if n == c.niveau_risque }}>{{ n }}</option>{% endfor %}</select>
+      {% if d.niveau_suggere and c.niveau_risque != d.niveau_suggere %}<p class="aide" style="margin-top:6px">Dernier mois : {{ d.niveau_suggere }}</p>{% endif %}</div>
+    <div class="champ"><label>Motifs <span class="aide">— un par ligne</span></label>
+      <textarea name="motifs_risque" rows="4">{{ c.motifs_risque | join("\n") }}</textarea></div>
+  </div>
+  <div class="champ" style="margin-bottom:0"><label>Texte de synthèse <span class="aide">— <code>**texte**</code> = gras, ligne vide = nouveau paragraphe</span></label>
+    <textarea name="synthese" rows="7">{{ c.synthese }}</textarea></div>
+</div>
+<div class="carte">
+  <div class="titre-carte"><h2><span class="section-num">02</span>Commentaire sur l'évolution</h2></div>
+  <textarea name="commentaire_evolution" rows="4">{{ c.commentaire_evolution }}</textarea>
+</div>
+<div class="carte">
+  <div class="titre-carte"><h2><span class="section-num">03</span>Perspectives et recommandations</h2>
+    <span class="etiquette">{{ t.actions_realisees }}/{{ t.actions }} actions réalisées</span></div>
+  <textarea name="perspectives" rows="7">{{ c.perspectives }}</textarea>
+  <p class="aide" style="margin:8px 0 0">Le tableau « Bilan des actions » du PDF est calculé à partir des suivis mensuels : il n'est pas modifiable ici.</p>
+</div>
+<div class="carte">
+  <div class="titre-carte"><h2><span class="section-num">04</span>Conclusion</h2></div>
+  <textarea name="conclusion" rows="5">{{ c.conclusion }}</textarea>
+</div>
+</fieldset>
+{% if modifiable %}
+<div class="barre-enregistrer">
+  <button class="bouton" type="submit">Enregistrer</button>
+  <span class="aide">L'aperçu se met à jour après l'enregistrement.</span>
+</div>
+{% endif %}
+</form>
+
+{% if r.statut == "brouillon" and utilisateur.peut("validateur") %}
+<form method="post" action="/rapports/{{ r.id }}/actualiser" style="margin-top:10px"
+      onsubmit="return confirm('Régénérer tous les textes à partir des chiffres ? Vos modifications seront perdues.')">
+  <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="reinitialiser" value="1">
+  <button class="bouton petit danger" type="submit">Réinitialiser tous les textes</button>
+</form>
+{% endif %}
+
+<h2>Versions</h2>
+<div class="tableau">
+<table class="liste">
+<thead><tr><th>Version</th><th>État</th><th>Créée</th><th>Validée</th></tr></thead>
+<tbody>{% for v in versions %}{% if v.statut == "valide" or utilisateur.peut("operateur") %}
+<tr><td><a href="/rapports/{{ v.id }}"><strong>v{{ v.version }}</strong></a>{% if v.id == r.id %} <span class="aide">affichée</span>{% endif %}</td>
+<td><span class="pastille {{ 'ok' if v.statut == 'valide' else 'cours' }}">{{ "Validé" if v.statut == "valide" else "Brouillon" }}</span></td>
+<td class="date">{{ v.cree_le | fdatetime }}</td><td class="date">{{ v.valide_le | fdatetime }}</td></tr>
+{% endif %}{% endfor %}</tbody>
+</table>
+</div>
+</div>
+
+<div class="colonne-apercu">
+  <div class="apercu-cadre">
+    <div class="barre-apercu">
+      <strong>Aperçu du PDF</strong>
+      <a href="/rapports/{{ r.id }}/apercu.pdf" target="_blank">Ouvrir dans un onglet ↗</a>
+    </div>
+    <iframe src="/rapports/{{ r.id }}/apercu.pdf#view=FitH" title="Aperçu du bilan"></iframe>
+  </div>
+</div>
+</div>
+{% endblock %}

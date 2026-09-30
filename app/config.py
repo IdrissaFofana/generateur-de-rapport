@@ -29,3 +29,29 @@ PRESTATAIRE = {
     "nom_complet": os.environ.get("PRESTATAIRE_NOM_COMPLET", "ESAY Corporation"),
     "signataire": os.environ.get("PRESTATAIRE_SIGNATAIRE", "Équipe technique ESAY"),
 }
+
+# Adresse de la plateforme, pour les liens des e-mails et messages Teams
+URL_PLATEFORME = os.environ.get("URL_PLATEFORME", "http://127.0.0.1:8010").rstrip("/")
+
+
+def _liste(nom):
+    return [x.strip() for x in os.environ.get(nom, "").replace(";", ",").split(",") if x.strip()]
+
+
+# Notifications (toutes facultatives : sans configuration, les alertes restent visibles dans la plateforme)
+SMTP = {
+    "hote": os.environ.get("SMTP_HOTE", ""),
+    "port": int(os.environ.get("SMTP_PORT", "587")),
+    "securite": os.environ.get("SMTP_SECURITE", "starttls").lower(),  # starttls | ssl | aucune
+    "utilisateur": os.environ.get("SMTP_UTILISATEUR", ""),
+    "mot_de_passe": os.environ.get("SMTP_MOT_DE_PASSE", ""),
+    "expediteur": os.environ.get("SMTP_EXPEDITEUR", ""),
+}
+ALERTES_EMAILS = _liste("ALERTES_EMAILS")        # destinataires des alertes, au fil de l'eau
+RESUME_EMAILS = _liste("RESUME_EMAILS")          # destinataires du résumé hebdomadaire (direction)
+TEAMS_WEBHOOK = os.environ.get("TEAMS_WEBHOOK", "")  # URL d'un workflow Teams « requête webhook reçue »
+# Seuils des alertes
+SEUIL_HAUSSE_DETECTIONS = int(os.environ.get("SEUIL_HAUSSE_DETECTIONS_PCT", "50"))
+SEUIL_SOUS_UTILISATION = int(os.environ.get("SEUIL_SOUS_UTILISATION_PCT", "70"))
+# Engagement interne : rapport mensuel validé au plus tard N jours après la fin du mois
+ENGAGEMENT_DELAI_JOURS = int(os.environ.get("ENGAGEMENT_DELAI_JOURS", "10"))

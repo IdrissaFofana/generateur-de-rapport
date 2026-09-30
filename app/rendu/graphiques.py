@@ -162,6 +162,44 @@ def vulnerabilites_applis(v, fmt="svg", maxi=8):
     return _exporter(fig, fmt)
 
 
+def evolution(points, indicateurs, fmt="svg"):
+    """Petits multiples : une courbe par indicateur (échelles indépendantes, jamais de double axe).
+    points : [{"libelle", "indicateurs"}] du plus ancien au plus récent · indicateurs : [(clé, titre)]."""
+    suivis = [(c, t) for c, t in indicateurs if any(p["indicateurs"].get(c) is not None for p in points)]
+    if len(points) < 2 or not suivis:
+        return None
+    colonnes = 2 if len(suivis) > 1 else 1
+    lignes = -(-len(suivis) // colonnes)
+    fig, axes = plt.subplots(lignes, colonnes, figsize=(7.2, 1.85 * lignes), squeeze=False)
+    x = list(range(len(points)))
+    libelles = [p["libelle"] for p in points]
+    for ax, (cle, titre) in zip(axes.flat, suivis):
+        y = [p["indicateurs"].get(cle) for p in points]
+        xs = [i for i, v in zip(x, y) if v is not None]
+        ys = [v for v in y if v is not None]
+        ax.fill_between(xs, ys, color=SERIE, alpha=0.1, linewidth=0)
+        ax.plot(xs, ys, color=SERIE, linewidth=2, solid_capstyle="round", solid_joinstyle="round", zorder=3)
+        ax.scatter(xs, ys, s=30, color=SERIE, edgecolors="white", linewidths=1.5, zorder=4)
+        dernier = ys[-1]
+        ax.annotate(f"{dernier:g}".replace(".", ","), (xs[-1], dernier), xytext=(6, 0), textcoords="offset points",
+                    va="center", fontsize=8.5, fontweight="bold", color=ENCRE)
+        ax.set_title(titre, loc="left", fontsize=9, color=ENCRE, pad=4)
+        ax.set_xticks(x)
+        ax.set_xticklabels(libelles, fontsize=7)
+        pas = max(1, round(len(points) / 6))
+        for i, lib in enumerate(ax.get_xticklabels()):
+            lib.set_visible(i % pas == 0 or i == len(points) - 1)
+        ax.set_ylim(bottom=0, top=max(ys) * 1.25 or 1)
+        ax.set_xlim(-0.3, len(points) - 0.4)
+        ax.yaxis.set_major_locator(MaxNLocator(nbins=3, integer=True))
+        ax.yaxis.grid(True, color=GRILLE, linewidth=0.8)
+        ax.tick_params(axis="both", length=0, labelsize=7)
+        ax.set_axisbelow(True)
+    for ax in list(axes.flat)[len(suivis):]:
+        ax.axis("off")
+    return _exporter(fig, fmt)
+
+
 def tous(d, fmt="svg"):
     """Tous les graphiques applicables au rapport : {nom: svg | png}."""
     debut, fin = date.fromisoformat(d["debut"]), date.fromisoformat(d["fin"])

@@ -1,0 +1,6 @@
+<tr>
+  <td><input type="text" name="tr_module" value="{{ tr.module }}" placeholder="ex. Kaspersky EDR Optimum"></td>
+  <td><select name="tr_resultat">{% for st in ["OK", "Partiel", "Échec"] %}<option {{ 'selected' if tr.resultat == st }}>{{ st }}</option>{% endfor %}</select></td>
+  <td><input type="text" name="tr_actions" value="{{ tr.actions }}" placeholder="ex. Déploiement de KES"></td>
+  <td><button type="button" class="bouton petit danger" title="Retirer" aria-label="Retirer" onclick="retirer(this)">✕</button></td>
+</tr>

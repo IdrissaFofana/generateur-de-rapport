@@ -2,12 +2,14 @@
 {% from "_macros.html" import selecteur_mois, couverture, zone_depot %}
 {% block titre %}{{ client.nom }} — {{ fmt_mois(annee, mois) }}{% endblock %}
 {% block contenu %}
-<a class="retour" href="/?annee={{ annee }}&mois={{ mois }}">Tableau de bord</a>
+<a class="retour" href="/production?annee={{ annee }}&mois={{ mois }}">Production</a>
 <div class="en-tete">
   <div><div class="surtitre">{{ fmt_mois(annee, mois) }}</div>
   <h1>{{ client.nom }}</h1>
   <div class="meta"><span class="pastille profil">{{ client.profil }}</span>
-  {% if client.avec_mdr %}<span>Tenant(s) MDR {% for t in client.tenants_mdr %}<code>{{ t }}</code> {% endfor %}</span>{% endif %}</div></div>
+  {% if client.avec_mdr %}<span>Tenant(s) MDR {% for t in client.tenants_mdr %}<code>{{ t }}</code> {% endfor %}</span>{% endif %}
+  <a class="bouton petit secondaire fleche" href="/clients/{{ client.id }}/parc?annee={{ annee }}&mois={{ mois }}">Suivi du parc</a>
+  <a class="bouton petit secondaire fleche" href="/clients/{{ client.id }}/interventions">Interventions</a></div></div>
   {{ selecteur_mois("/clients/" ~ client.id ~ "/aller", annee, mois) }}
 </div>
 
@@ -20,6 +22,8 @@
       <div style="margin-bottom:12px">{{ couverture(mdr) }}</div>
       {% if mdr and mdr.manquants %}<p class="aide" style="margin:0">Jours manquants : <span class="mono">{{ mdr.manquants[0] | fdate }} → {{ mdr.manquants[-1] | fdate }}</span>.
         Les hebdos se déposent une seule fois pour tous les clients, dans <a href="/hebdos?annee={{ annee }}&mois={{ mois }}">Hebdos MDR</a>.</p>
+      {% elif mdr and mdr.a_venir %}<p class="aide" style="margin:0">Données à jour. Du <span class="mono">{{ mdr.a_venir[0] | fdate }} → {{ mdr.a_venir[-1] | fdate }}</span>,
+        l'hebdo de la semaine en cours n'est pas encore paru : ces jours ne sont pas comptés comme manquants.</p>
       {% elif mdr and mdr.tenant_trouve %}<p class="aide" style="margin:0">Le mois est entièrement couvert par les rapports hebdomadaires.</p>{% endif %}
     {% endif %}
   </div>
@@ -65,5 +69,38 @@
   <div hx-get="/clients/{{ client.id }}/{{ annee }}/{{ mois }}/apercu" hx-trigger="load" hx-swap="innerHTML">
     <p class="aide">Calcul en cours…</p>
   </div>
+</div>
+
+<div class="carte">
+  <div class="titre-carte"><h2><span class="section-num">05</span>Évolution sur 12 mois</h2>
+    <span class="aide">rapports mensuels validés jusqu'à {{ fmt_mois(annee, mois) | lower }}</span></div>
+  {% if historique | length < 2 %}
+    <p class="aide" style="margin:0">{{ "Un seul rapport validé pour l'instant : " if historique else "Aucun rapport validé sur la période : " }}les courbes
+    s'afficheront à partir du deuxième mois validé.</p>
+  {% else %}
+    {% set classes_risque = {"Critique": "critique", "Élevé": "eleve", "Modéré": "modere", "Faible": "faible"} %}
+    <div class="bande-risque" aria-label="Niveau de risque par mois">
+      {% for p in historique %}
+      <a class="mois-risque {{ classes_risque.get(p.niveau, '') }}" href="/rapports/{{ p.rapport_id }}" title="{{ p.libelle }} : risque {{ p.niveau | lower }} (v{{ p.version }})">
+        <span class="hex"></span><span class="lib">{{ p.libelle }}</span></a>
+      {% endfor %}
+    </div>
+    <div class="courbes">
+      {% for c in courbes %}
+      <figure class="petite-courbe">
+        <figcaption><span>{{ c.titre }}</span>
+          {% if c.variation %}<span class="variation">{{ "▲" if c.variation[0] > 0 else "▼" if c.variation[0] < 0 else "=" }} {{ c.variation[1] }}</span>{% endif %}</figcaption>
+        {{ c.svg }}
+      </figure>
+      {% endfor %}
+    </div>
+    <details class="table-donnees"><summary>Voir les valeurs</summary>
+      <div class="tableau"><table class="liste">
+        <thead><tr><th>Mois</th><th>Risque</th>{% for cle, titre in INDICATEURS_SUIVIS %}<th>{{ titre }}</th>{% endfor %}</tr></thead>
+        <tbody>{% for p in historique %}<tr><td class="date">{{ p.libelle }}</td><td>{{ p.niveau }}</td>
+          {% for cle, titre in INDICATEURS_SUIVIS %}<td class="date">{{ p.indicateurs.get(cle) if p.indicateurs.get(cle) is not none else "—" }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+      </table></div>
+    </details>
+  {% endif %}
 </div>
 {% endblock %}

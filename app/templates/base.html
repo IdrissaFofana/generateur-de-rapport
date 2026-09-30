@@ -17,9 +17,22 @@
 <aside class="laterale">
   <a class="marque" href="/"><img src="/static/logo-transparent.png" alt="ESAY Corporation"><span>Rapports de sécurité</span></a>
   <nav>
+    <div class="nav-groupe">Pilotage</div>
+    <a href="/" class="{{ 'actif' if chemin == '/' }}">
+      <svg viewBox="0 0 24 24"><path d="M12 2.8 20 7.4v9.2L12 21.2 4 16.6V7.4z"/><path d="M12 12v9M12 12 4.2 7.5M12 12l7.8-4.5"/></svg>Vue d'ensemble</a>
+    <a href="/alertes" class="{{ 'actif' if chemin.startswith('/alertes') }}">
+      <svg viewBox="0 0 24 24"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg>Alertes
+      {% if alertes_ouvertes %}<span class="badge" title="{{ alertes_ouvertes }} alerte(s) ouverte(s)">{{ alertes_ouvertes }}</span>{% endif %}</a>
+    <a href="/contrats" class="{{ 'actif' if chemin.startswith('/contrats') }}">
+      <svg viewBox="0 0 24 24"><path d="M6 3.5h9l4 4v13H6z"/><path d="M14.5 3.5v4.5H19M9 13l2 2 4-4"/></svg>Contrats</a>
     <div class="nav-groupe">Production</div>
-    <a href="/" class="{{ 'actif' if chemin == '/' or chemin.startswith('/clients') or chemin.startswith('/rapports') }}">
-      <svg viewBox="0 0 24 24"><path d="M12 2.8 20 7.4v9.2L12 21.2 4 16.6V7.4z"/><path d="M12 12v9M12 12 4.2 7.5M12 12l7.8-4.5"/></svg>Tableau de bord</a>
+    {% set sur_interventions = chemin.startswith('/interventions') or chemin.startswith('/bibliotheque') or (chemin.startswith('/clients') and chemin.endswith('/interventions')) %}
+    <a href="/production" class="{{ 'actif' if section is not defined and not sur_interventions and (chemin.startswith('/production') or chemin.startswith('/clients') or chemin.startswith('/rapports')) }}">
+      <svg viewBox="0 0 24 24"><rect x="4" y="3.5" width="16" height="17" rx="1.5"/><path d="M8 8.5h8M8 12h8M8 15.5h5"/></svg>Production</a>
+    <a href="/interventions" class="{{ 'actif' if sur_interventions }}">
+      <svg viewBox="0 0 24 24"><path d="M14.5 5.5a4 4 0 0 0-5.3 5.3L3.5 16.5l2 2 5.7-5.7a4 4 0 0 0 5.3-5.3l-2.4 2.4-2-2z"/></svg>Interventions</a>
+    <a href="/bilans" class="{{ 'actif' if chemin.startswith('/bilans') or section == 'bilans' }}">
+      <svg viewBox="0 0 24 24"><path d="M4 20h16M6.5 20V13M11 20V8M15.5 20v-5M20 20V5"/></svg>Bilans</a>
     <a href="/hebdos" class="{{ 'actif' if chemin.startswith('/hebdos') }}">
       <svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15" rx="1.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4M7.5 13.5h3M7.5 16.5h6"/></svg>Hebdos MDR</a>
     {% if utilisateur.peut("admin") %}

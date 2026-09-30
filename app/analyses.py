@@ -13,6 +13,7 @@ from datetime import datetime
 
 from sqlalchemy import select, update
 
+from . import alertes
 from .db import Session
 from .modeles import ANALYSE_OK, EN_ATTENTE, EN_COURS, ERREUR, ExportKsc, Hebdo
 from .moteur.lecture_hebdo import lire_hebdo, vers_json
@@ -47,6 +48,7 @@ def _analyser_hebdo(hid):
             journal.warning("Analyse hebdo %s : %s", hid, traceback.format_exc())
             h.statut, h.erreur = ERREUR, f"Fichier non reconnu comme rapport hebdomadaire MDR ({e})."
         db.commit()
+        _alertes(db)
 
 
 def _analyser_export(eid):
@@ -77,6 +79,15 @@ def _analyser_export(eid):
             journal.warning("Analyse export %s : %s", eid, traceback.format_exc())
             e.statut, e.erreur = ERREUR, f"Lecture impossible ({ex})."
         db.commit()
+        _alertes(db)
+
+
+def _alertes(db):
+    """Nouvelles données (incident MDR, serveur critique…) : alertes évaluées dans le processus d'analyse."""
+    try:
+        alertes.evaluer_et_notifier(db, en_arriere_plan=False)
+    except Exception:  # une alerte ne doit jamais faire échouer l'analyse
+        journal.warning("Évaluation des alertes : %s", traceback.format_exc())
 
 
 def planifier_hebdo(hid):

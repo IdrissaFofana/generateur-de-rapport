@@ -44,7 +44,7 @@ def main(sortie):
             r = http.get("/connexion")
             csrf = re.search(r'name="csrf" value="([^"]+)"', r.text).group(1)
             http.post("/connexion", data={"email": EMAIL, "mot_de_passe": MDP, "csrf": csrf})
-            capturer(http.get("/?annee=2026&mois=9").text, "02_tableau", sortie, 700)
+            capturer(http.get("/production?annee=2026&mois=9").text, "02_tableau", sortie, 700)
             capturer(http.get("/hebdos?annee=2026&mois=9").text, "03_hebdos", sortie, 1100)
             base = f"/clients/{hudson.id}/2026/9"
             fiche = http.get(base).text

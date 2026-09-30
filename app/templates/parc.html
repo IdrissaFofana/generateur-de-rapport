@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% from "_macros.html" import selecteur_mois %}
+{% block titre %}Parc — {{ client.nom }}{% endblock %}
+{% block contenu %}
+{% set h = historique %}
+<a class="retour" href="/clients/{{ client.id }}/{{ annee }}/{{ mois }}">{{ client.nom }} — {{ fmt_mois(annee, mois) }}</a>
+<div class="en-tete">
+  <div><div class="surtitre">Suivi du parc · 12 mois jusqu'à {{ fmt_mois(annee, mois) | lower }}</div>
+  <h1>{{ client.nom }}</h1>
+  <p class="sous-titre">Appareils signalés par Kaspersky Security Center dans les exports « État de la protection » successifs
+  ({{ h.mois_avec_export }} mois avec export sur 12).</p></div>
+  {{ selecteur_mois("/clients/" ~ client.id ~ "/parc", annee, mois) }}
+</div>
+
+{% if not dernier %}
+<div class="carte etat-vide"><div class="hex-vide"></div>
+  <div><h2>Aucun export « État de la protection » sur la période</h2>
+  <p class="aide">Le suivi du parc se construit avec les exports KSC déposés chaque mois dans la fiche du client.</p></div></div>
+{% else %}
+{% set exp = dernier[2] %}
+<div class="indicateurs">
+  <div class="indicateur marine"><div class="valeur">{{ exp.nb_appareils or exp.appareils | length }}</div><div class="libelle">Appareils (export {{ fmt_mois(dernier[0], dernier[1]) | lower }})</div></div>
+  <div class="indicateur critique"><div class="valeur">{{ h.recurrents | length }}</div><div class="libelle">En anomalie 2 mois de suite ou plus</div></div>
+  <div class="indicateur critique"><div class="valeur">{{ h.recurrents | selectattr("serveur") | list | length }}</div><div class="libelle">dont serveurs</div></div>
+  <div class="indicateur alerte"><div class="valeur">{{ planning | selectattr("statut", "in", ["expire", "urgent"]) | map(attribute="appareils") | sum }}</div><div class="libelle">Sur un système hors support ou sous 6 mois</div></div>
+  <div class="indicateur ok"><div class="valeur">{{ h.resolus | length }}</div><div class="libelle">Revenus à la normale</div></div>
+</div>
+
+{# ---------------- Anomalies récurrentes ---------------- #}
+<div class="carte">
+  <div class="titre-carte"><h2><span class="section-num">01</span>Appareils en anomalie récurrente</h2>
+    <span class="aide">6 derniers mois · série = mois consécutifs en anomalie jusqu'au dernier export</span></div>
+  {% set debut_grille = [h.colonnes | length - 6, 0] | max %}
+  {% set ANOM = {"ksn": "KSN inaccessible", "deconnecte": "déconnecté", "non_administre": "non administré",
+                 "analyse_ancienne": "analyse ancienne", "bases_depassees": "bases dépassées", "protection_desactivee": "protection désactivée",
+                 "non_installe": "non installé", "redemarrage": "redémarrage requis", "licence": "licence", "autre": "autre"} %}
+  {% if h.recurrents %}
+  <div class="tableau"><table class="liste grille-parc">
+    <thead><tr><th>Appareil et anomalies</th><th>Série</th>{% for c in h.colonnes[debut_grille:] %}<th class="mois-col" title="{{ c.long }}{{ '' if c.export else ' : pas d’export' }}">{{ c.libelle }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for f in h.recurrents %}<tr>
+      <td class="nobr"><strong>{{ f.appareil }}</strong>{% if f.serveur %} <span class="etiquette">serveur</span>{% endif %}
+        <div class="aide">{{ f.os }} · {{ f.groupe }}</div>
+        <div class="anomalies" title="{{ f.raison }}">{% for x in f.anomalies %}<span>{{ ANOM.get(x, x) }}</span>{% endfor %}</div></td>
+      <td><span class="etiquette {{ 'erreur' if f.serie >= 3 else 'alerte' }}">{{ f.serie }} mois</span></td>
+      {% for e in f.etats[debut_grille:] %}{% set c = h.colonnes[debut_grille + loop.index0] %}
+      <td class="mois-col"><span class="point-etat {{ 'critique' if e == 'Critique' else 'avertissement' if e else 'sans-export' if not c.export else 'normal' }}"
+          title="{{ c.long }} : {{ e or ('pas d’export' if not c.export else 'non signalé') }}"></span></td>{% endfor %}
+    </tr>{% endfor %}</tbody></table></div>
+  <div class="legende"><span><span class="point-etat critique"></span> Critique</span><span><span class="point-etat avertissement"></span> Avertissement</span>
+    <span><span class="point-etat normal"></span> Non signalé</span><span><span class="point-etat sans-export"></span> Pas d'export ce mois</span></div>
+  {% elif h.mois_avec_export < 2 %}
+  <p class="aide" style="margin:0">Un seul export disponible : la récurrence se mesure à partir du deuxième mois déposé.
+    {{ h.appareils | selectattr("present") | list | length }} appareil(s) sont signalés dans le dernier export.</p>
+  {% else %}<p class="aide" style="margin:0">Aucun appareil signalé deux mois de suite.</p>{% endif %}
+</div>
+
+{# ---------------- Fin de support ---------------- #}
+<div class="carte">
+  <div class="titre-carte"><h2><span class="section-num">02</span>Planning des fins de support</h2>
+    <span class="aide">sur les {{ exp.appareils | length }} appareils listés dans l'export de {{ fmt_mois(dernier[0], dernier[1]) | lower }}</span></div>
+  <div class="tableau"><table class="liste">
+    <thead><tr><th>Système</th><th>Fin du support Microsoft</th><th>État</th><th>Appareils</th><th>Appareils concernés</th></tr></thead>
+    <tbody>{% for o in planning %}<tr>
+      <td><strong>{{ o.os }}</strong></td>
+      <td class="date">{{ o.fin_support.strftime("%d/%m/%Y") if o.fin_support else "—" }}
+        {% if o.jours is not none %}<div class="aide">{{ "il y a " ~ (-o.jours) ~ " jours" if o.jours < 0 else "dans " ~ o.jours ~ " jours" }}</div>{% endif %}</td>
+      <td><span class="pastille {{ {'expire': 'erreur', 'urgent': 'alerte', 'a-planifier': 'cours', 'ok': 'ok'}.get(o.statut, 'attente') }}">{{ o.libelle }}</span></td>
+      <td class="date">{{ o.appareils }}{% if o.serveurs %} <span class="aide">dont {{ o.serveurs }} serveur(s)</span>{% endif %}</td>
+      <td class="aide">{% if o.statut in ("expire", "urgent", "a-planifier") %}{{ o.noms[:8] | join(", ") }}{{ " … +" ~ (o.noms | length - 8) if o.noms | length > 8 }}{% else %}—{% endif %}</td>
+    </tr>{% endfor %}</tbody></table></div>
+  <p class="aide" style="margin:10px 0 0">Windows 11 n'est pas suivi : sa fin de support dépend de la version installée, que l'export KSC ne précise pas.</p>
+</div>
+
+{# ---------------- Revenus à la normale ---------------- #}
+{% if h.resolus %}
+<div class="carte">
+  <div class="titre-carte"><h2><span class="section-num">03</span>Revenus à la normale</h2><span class="aide">signalés auparavant, absents du dernier export</span></div>
+  <p style="margin:0">{% for f in h.resolus %}<span class="etiquette ok" title="Signalé {{ f.mois_signales }} mois">{{ f.appareil }}</span> {% endfor %}</p>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

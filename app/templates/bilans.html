@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block titre %}Bilans {{ libelle }}{% endblock %}
+{% block contenu %}
+{% set url = "/bilans?periodicite=" ~ periodicite %}
+<div class="en-tete">
+  <div><div class="surtitre">Bilans {{ "trimestriels" if periodicite == "trimestriel" else "semestriels" }}</div>
+  <h1>{{ libelle_long | capitalize }}</h1>
+  <p class="sous-titre">Un bilan consolide les rapports mensuels validés de la période : tendances, incidents, menaces et avancement des actions.</p></div>
+  <div class="en-ligne">
+    <div class="segments" role="tablist" aria-label="Type de bilan">
+      <a href="/bilans?periodicite=trimestriel" class="{{ 'actif' if periodicite == 'trimestriel' }}">Trimestre</a>
+      <a href="/bilans?periodicite=semestriel" class="{{ 'actif' if periodicite == 'semestriel' }}">Semestre</a>
+    </div>
+    <div class="periode">
+      <a href="{{ url }}&annee={{ precedente[0] }}&numero={{ precedente[1] }}" title="Période précédente" aria-label="Période précédente">‹</a>
+      <form method="get" action="/bilans">
+        <input type="hidden" name="periodicite" value="{{ periodicite }}">
+        <select name="numero" aria-label="Période">{% for n in range(1, nb_periodes + 1) %}<option value="{{ n }}" {{ 'selected' if n == numero }}>{{ ("T" if periodicite == "trimestriel" else "S") ~ n }}</option>{% endfor %}</select>
+        <select name="annee" aria-label="Année">{% for a in range(annee - 2, annee + 2) %}<option {{ 'selected' if a == annee }}>{{ a }}</option>{% endfor %}</select>
+        <button type="submit">Afficher</button>
+      </form>
+      <a href="{{ url }}&annee={{ suivante[0] }}&numero={{ suivante[1] }}" title="Période suivante" aria-label="Période suivante">›</a>
+    </div>
+  </div>
+</div>
+
+{% set complets = lignes | selectattr("complet") | rejectattr("rapport") | list %}
+{% if utilisateur.peut("operateur") %}
+<div class="actions-groupees" style="margin-top:0">
+  <span class="intitule">Actions groupées</span>
+  <form method="post" action="/bilans/creer-tous" onsubmit="return confirm('Créer les bilans {{ libelle }} de tous les clients complets ?')">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="periodicite" value="{{ periodicite }}">
+    <input type="hidden" name="annee" value="{{ annee }}"><input type="hidden" name="numero" value="{{ numero }}">
+    <button class="bouton petit" type="submit" {{ 'disabled' if not complets }}>Créer les bilans complets <span class="compteur">{{ complets | length }}</span></button>
+  </form>
+</div>
+{% endif %}
+
+<div class="tableau">
+<table class="liste">
+<thead><tr><th>Client</th><th>Rapports mensuels validés</th><th>Bilan</th><th></th></tr></thead>
+<tbody>
+{% for l in lignes %}
+{% set c, r = l.client, l.rapport %}
+<tr>
+  <td><div class="client">{{ c.nom }}</div><span class="pastille profil">{{ c.profil }}</span></td>
+  <td><span class="flux">{% for a, m in mois %}
+      <a class="etape {{ 'ok' if m in l.valides else 'attente' }}" href="/clients/{{ c.id }}/{{ a }}/{{ m }}"
+         title="{{ fmt_mois(a, m) }} : {{ 'rapport validé' if m in l.valides else 'pas de rapport validé' }}">{{ "%02d" | format(m) }}</a>{% endfor %}</span>
+    <span class="aide mono" style="margin-left:10px">{{ l.valides | length }}/{{ l.attendus }}</span></td>
+  <td>{% if r %}<span class="pastille {{ 'ok' if r.statut == 'valide' else 'cours' }}">{{ "Validé" if r.statut == "valide" else "Brouillon" }}</span> <span class="etiquette">v{{ r.version }}</span>
+      {% elif l.complet %}<span class="pastille ok">Prêt</span>
+      {% elif l.valides %}<span class="pastille alerte">Partiel</span>
+      {% else %}<span class="pastille attente">Incomplet</span>{% endif %}</td>
+  <td class="fin">
+    {% if r %}<a class="bouton petit secondaire fleche" href="/rapports/{{ r.id }}">Ouvrir</a>
+    {% elif utilisateur.peut("operateur") and l.valides %}
+    <form method="post" action="/bilans/creer"{% if not l.complet %} onsubmit="return confirm('Des mois ne sont pas validés : ils seront exclus du bilan. Continuer ?')"{% endif %}>
+      <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="client_id" value="{{ c.id }}">
+      <input type="hidden" name="periodicite" value="{{ periodicite }}"><input type="hidden" name="annee" value="{{ annee }}"><input type="hidden" name="numero" value="{{ numero }}">
+      <button class="bouton petit {{ '' if l.complet else 'secondaire' }} fleche" type="submit">Créer le bilan</button></form>
+    {% endif %}</td>
+</tr>
+{% else %}<tr><td colspan="4" class="vide">Aucun client actif.</td></tr>{% endfor %}
+</tbody>
+</table>
+</div>
+<div class="legende">
+  <span><strong>Prêt</strong> tous les mois de la période sont validés</span>
+  <span><strong>Partiel</strong> bilan possible, les mois non validés en sont exclus</span>
+  <span><strong>Incomplet</strong> aucun rapport mensuel validé sur la période</span>
+</div>
+{% endblock %}

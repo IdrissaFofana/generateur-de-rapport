@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block titre %}Bibliothèque d'actions{% endblock %}
+{% block contenu %}
+<a class="retour" href="/interventions">Rapports d'intervention</a>
+<div class="en-tete">
+  <div><div class="surtitre">Rapports d'intervention</div><h1>Bibliothèque</h1>
+  <p class="sous-titre">Actions et recommandations proposées dans le formulaire selon le type d'intervention. Tout le monde peut en ajouter ;
+  les validateurs peuvent les modifier, les désactiver ou les supprimer.</p></div>
+</div>
+
+<div class="barre-filtres" style="margin-top:0">
+  <div class="segments">{% for cle, (lib, titre) in TYPES.items() %}<a href="/bibliotheque?type={{ cle }}&genre={{ genre }}" class="{{ 'actif' if type_ == cle }}">{{ lib }}</a>{% endfor %}
+    <a href="/bibliotheque?type=tous&genre={{ genre }}" class="{{ 'actif' if type_ == 'tous' }}" title="Proposés pour tous les types">Tous types</a></div>
+  <div class="segments">
+    <a href="/bibliotheque?type={{ type_ }}&genre=action" class="{{ 'actif' if genre == 'action' }}">Actions</a>
+    <a href="/bibliotheque?type={{ type_ }}&genre=recommandation" class="{{ 'actif' if genre == 'recommandation' }}">Recommandations</a></div>
+</div>
+
+<form method="post" action="/bibliotheque" class="carte">
+  <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="type" value="{{ type_ }}"><input type="hidden" name="genre" value="{{ genre }}">
+  <div class="titre-carte"><h2>Ajouter {{ "une action" if genre == "action" else "une recommandation" }}</h2>
+    <span class="aide">{{ TYPES[type_][0] if type_ in TYPES else "tous les types" }}</span></div>
+  <div class="grille" style="grid-template-columns: minmax(160px, 240px) minmax(0, 1fr) auto; align-items:end">
+    <div><label for="b-cat">Catégorie</label><input type="text" id="b-cat" name="categorie" list="categories" placeholder="ex. Stratégies"></div>
+    <div><label for="b-lib">Libellé</label><input type="text" id="b-lib" name="libelle" required></div>
+    <div><button class="bouton" type="submit">Ajouter</button></div>
+  </div>
+  <datalist id="categories">{% for c in elements | map(attribute="categorie") | unique %}<option value="{{ c }}">{% endfor %}</datalist>
+</form>
+
+<div class="tableau">
+<table class="liste">
+<thead><tr><th style="width:200px">Catégorie</th><th>Libellé</th><th style="width:70px">Actif</th><th></th></tr></thead>
+<tbody>
+{% for e in elements %}
+<tr class="{{ '' if e.actif else 'inactif' }}">
+  {% if utilisateur.peut("validateur") %}
+  <td><form method="post" action="/bibliotheque/{{ e.id }}" id="e{{ e.id }}"><input type="hidden" name="csrf" value="{{ csrf }}"></form>
+      <input type="text" name="categorie" value="{{ e.categorie }}" form="e{{ e.id }}"></td>
+  <td><input type="text" name="libelle" value="{{ e.libelle }}" form="e{{ e.id }}" required></td>
+  <td><input type="checkbox" name="actif" value="true" form="e{{ e.id }}" {{ 'checked' if e.actif }} aria-label="Actif"></td>
+  <td class="fin"><span class="en-ligne" style="justify-content:flex-end;flex-wrap:nowrap">
+    <button class="bouton petit" type="submit" form="e{{ e.id }}">Enregistrer</button>
+    <form method="post" action="/bibliotheque/{{ e.id }}/supprimer" onsubmit="return confirm('Supprimer cet élément ?')">
+      <input type="hidden" name="csrf" value="{{ csrf }}"><button class="bouton petit danger" type="submit">Supprimer</button></form></span></td>
+  {% else %}
+  <td class="aide">{{ e.categorie }}</td><td>{{ e.libelle }}</td><td>{{ "oui" if e.actif else "non" }}</td><td></td>
+  {% endif %}
+</tr>
+{% else %}<tr><td colspan="4" class="vide">Aucun élément pour ce type.</td></tr>{% endfor %}
+</tbody>
+</table>
+</div>
+{% endblock %}

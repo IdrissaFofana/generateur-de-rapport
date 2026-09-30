@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+{% block titre %}{{ i.numero }} — {{ i.client.nom }}{% endblock %}
+{% block contenu %}
+<a class="retour" href="/clients/{{ i.client_id }}/interventions">Interventions — {{ i.client.nom }}</a>
+<div class="en-tete">
+  <div>
+    <div class="surtitre">{{ i.titre }}</div>
+    <h1>{{ i.client.nom }} <span class="numero-ri">{{ i.numero }}</span></h1>
+    <div class="meta">
+      <span class="pastille {{ 'ok' if i.statut == 'valide' else 'cours' }}">{{ "Validé" if i.statut == "valide" else "Brouillon" }}</span>
+      {% if i.envoye_le %}<span class="etiquette ok" title="{{ i.envoye_a }}">envoyé le {{ i.envoye_le | fdate }}</span>{% endif %}
+      <span class="aide">Créé le <span class="mono">{{ i.cree_le | fdatetime }}</span>{% if i.cree_par %} par {{ i.cree_par.nom }}{% endif %}
+      {% if i.valide_le %} · généré le <span class="mono">{{ i.valide_le | fdatetime }}</span>{% endif %}</span>
+    </div>
+  </div>
+  <div class="en-ligne">
+    {% if utilisateur.peut("operateur") %}
+    <form method="post" action="/interventions/{{ i.id }}/dupliquer"><input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="bouton secondaire" type="submit" title="Nouveau rapport reprenant l'objet, le contexte et les points bloquants">Dupliquer</button></form>
+    {% endif %}
+    {% if modifiable %}
+      <a class="bouton secondaire" href="/interventions/{{ i.id }}/apercu.pdf" target="_blank">Aperçu PDF ↗</a>
+      <form method="post" action="/interventions/{{ i.id }}/valider" onsubmit="return confirm('Générer le rapport définitif ? Pensez à enregistrer vos dernières modifications.')">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><button class="bouton valider" type="submit">Générer le rapport</button></form>
+    {% elif i.statut == "valide" %}
+      {% if utilisateur.peut("validateur") %}
+      <form method="post" action="/interventions/{{ i.id }}/rouvrir" onsubmit="return confirm('Rouvrir ce rapport en modification ?')">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><button class="bouton fantome" type="submit">Rouvrir</button></form>
+      {% endif %}
+      <a class="bouton" href="/interventions/{{ i.id }}/pdf">Télécharger le PDF</a>
+    {% endif %}
+  </div>
+</div>
+
+{% if i.statut == "valide" %}
+{# ============================== Rapport généré : envoi + aperçu ============================== #}
+<div class="relecture">
+<div>
+  <div class="carte">
+    <div class="titre-carte"><h2><span class="section-num">01</span>Envoyer au client</h2></div>
+    {% if utilisateur.peut("operateur") %}
+    <form method="post" action="/interventions/{{ i.id }}/envoyer">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="champ"><label for="dest">Destinataires <span class="aide">— séparés par des virgules</span></label>
+        <input type="text" id="dest" name="destinataires" value="{{ i.client.emails_rapports | join(', ') }}" placeholder="contact@client.ci"></div>
+      <div class="en-ligne">
+        <button class="bouton" type="submit" {{ 'disabled title="Serveur de messagerie non configuré"' | safe if not email }}>Envoyer par e-mail</button>
+        <a class="bouton secondaire" href="/interventions/{{ i.id }}/brouillon.eml" title="Message avec le PDF joint, à ouvrir dans Outlook">Brouillon Outlook</a>
+      </div>
+      <p class="aide" style="margin:10px 0 0">{% if not email %}Le serveur de messagerie n'est pas configuré : utilisez le brouillon Outlook (PDF déjà joint), puis envoyez-le depuis votre messagerie.{% else %}Le message part avec le PDF en pièce jointe.{% endif %}
+      {% if not i.client.emails_rapports %}Les adresses habituelles du client se renseignent dans sa fiche (Administration → Clients).{% endif %}</p>
+    </form>
+    {% endif %}
+    {% if i.envoye_le %}<div class="message succes" style="margin:14px 0 0"><div>Envoyé le {{ i.envoye_le | fdatetime }} — {{ i.envoye_a }}</div></div>{% endif %}
+  </div>
+  <div class="carte">
+    <div class="titre-carte"><h2><span class="section-num">02</span>Résumé</h2></div>
+    <table class="liste resume-ri"><tbody>
+      <tr><th>Type</th><td>{{ i.libelle_type }} · {{ MODES.get(i.mode) }}</td></tr>
+      <tr><th>Date</th><td>{{ i.date_debut | fdate }}{% if i.date_fin != i.date_debut %} → {{ i.date_fin | fdate }}{% endif %}
+        {% if i.heure_debut %} · {{ i.heure_debut.strftime("%Hh%M") }}{% if i.heure_fin %}–{{ i.heure_fin.strftime("%Hh%M") }}{% endif %}{% endif %}</td></tr>
+      <tr><th>Intervenants</th><td>{{ i.intervenants | join(", ") }}</td></tr>
+      <tr><th>Statut global</th><td><span class="pastille {{ {'OK': 'ok', 'Partiel': 'alerte', 'Échec': 'erreur'}.get(i.statut_global) }}">{{ i.statut_global }}</span></td></tr>
+      <tr><th>Actions</th><td>{{ i.resultat | length }} · points bloquants : {{ i.points_bloquants | length }}
+        {% set plan = i.points_bloquants | selectattr("plan_action") | list %}{% if plan %} ({{ plan | length }} repris dans le plan d'action){% endif %}</td></tr>
+    </tbody></table>
+  </div>
+</div>
+<div class="colonne-apercu">
+  <div class="apercu-cadre">
+    <div class="barre-apercu"><strong>{{ i.numero }}</strong><a href="/interventions/{{ i.id }}/pdf">Télécharger ↓</a></div>
+    <iframe src="/interventions/{{ i.id }}/pdf#view=FitH" title="Rapport d'intervention"></iframe>
+  </div>
+</div>
+</div>
+
+{% else %}
+{# ============================== Saisie ============================== #}
+{% if not modifiable %}<div class="message info"><div>Brouillon en cours de rédaction : lecture seule pour votre rôle.</div></div>{% endif %}
+<div class="saisie-ri">
+<form method="post" action="/interventions/{{ i.id }}" id="formulaire" class="colonne-formulaire">
+<input type="hidden" name="csrf" value="{{ csrf }}">
+<fieldset {{ 'disabled' if not modifiable }}>
+
+<div class="carte">
+  <div class="titre-carte"><h2><span class="section-num">01</span>Intervention</h2></div>
+  <div class="grille" style="grid-template-columns: repeat(auto-fit, minmax(170px, 1fr))">
+    <div class="champ"><label for="type">Type</label>
+      <select id="type" name="type">{% for cle, (lib, titre) in TYPES.items() %}<option value="{{ cle }}" data-titre="{{ titre }}" {{ 'selected' if i.type == cle }}>{{ lib }}</option>{% endfor %}</select>
+      <p class="aide" id="titre-doc" style="margin:5px 0 0">{{ i.titre }}</p></div>
+    <div class="champ"><label for="mode">Mode</label>
+      <select id="mode" name="mode">{% for cle, lib in MODES.items() %}<option value="{{ cle }}" {{ 'selected' if i.mode == cle }}>{{ lib }}</option>{% endfor %}</select></div>
+    <div class="champ"><label for="dd">Du</label><input type="date" id="dd" name="date_debut" value="{{ i.date_debut.isoformat() }}" required></div>
+    <div class="champ"><label for="df">Au</label><input type="date" id="df" name="date_fin" value="{{ i.date_fin.isoformat() }}"></div>
+    <div class="champ"><label for="hd">Heure d'arrivée</label><input type="time" id="hd" name="heure_debut" value="{{ i.heure_debut.strftime('%H:%M') if i.heure_debut else '' }}"></div>
+    <div class="champ"><label for="hf">Heure de départ</label><input type="time" id="hf" name="heure_fin" value="{{ i.heure_fin.strftime('%H:%M') if i.heure_fin else '' }}"></div>
+  </div>
+  <div class="grille">
+    <div class="champ"><label for="interloc">Interlocuteur chez le client</label>
+      <input type="text" id="interloc" name="interlocuteur" value="{{ i.interlocuteur }}" placeholder="Nom, fonction"></div>
+    <div class="champ"><label for="intervenants">Intervenant(s) <span class="aide">— un par ligne</span></label>
+      <textarea id="intervenants" name="intervenants" rows="2" style="min-height:0">{{ i.intervenants | join("\n") }}</textarea>
+      <div class="tenants">{% for nom in utilisateurs %}<button type="button" onclick="ajouterIntervenant('{{ nom }}')">{{ nom }}</button>{% endfor %}</div></div>
+  </div>
+  <div class="champ" style="margin:0"><label for="objet">Objet de l'intervention</label>
+    <textarea id="objet" name="objet" rows="4" placeholder="Ce qui était demandé et pourquoi.">{{ i.objet }}</textarea></div>
+</div>
+
+<div class="carte">
+  <div class="titre-carte"><h2><span class="section-num">02</span>Contexte et environnement initial</h2><span class="aide">pré-rempli depuis le dernier export KSC</span></div>
+  <div class="grille" style="grid-template-columns: 120px 120px minmax(0, 1fr)">
+    <div class="champ"><label>Postes</label><input type="text" name="ctx_postes" value="{{ i.contexte.postes }}"></div>
+    <div class="champ"><label>Serveurs</label><input type="text" name="ctx_serveurs" value="{{ i.contexte.serveurs }}"></div>
+    <div class="champ"><label>Version de KSC</label><input type="text" name="ctx_version_ksc" value="{{ i.contexte.version_ksc }}" placeholder="ex. 15.1"></div>
+  </div>
+  <div class="champ"><label>Systèmes d'exploitation</label><input type="text" name="ctx_systemes" value="{{ i.contexte.systemes }}"></div>
+  <div class="champ" style="margin:0"><label>Autres éléments</label><input type="text" name="ctx_autres" value="{{ i.contexte.autres }}"></div>
+</div>
+
+<div class="carte">
+  <div class="titre-carte"><h2><span class="section-num">03</span>Travaux réalisés / modules</h2><span class="aide">facultatif</span></div>
+  <div class="tableau"><table class="liste lignes-ri" id="travaux">
+    <thead><tr><th style="width:28%">Module / solution</th><th style="width:110px">Résultat</th><th>Actions effectuées</th><th style="width:40px"></th></tr></thead>
+    <tbody>{% for t in i.travaux %}{% set tr = t %}{% include "_ligne_travaux.html" %}{% endfor %}</tbody>
+  </table></div>
+  {% if modifiable %}<button type="button" class="bouton petit fantome" style="margin-top:8px" onclick="ajouterLigne('travaux', 'modele-travaux')">+ Ajouter un module</button>{% endif %}
+  <template id="modele-travaux">{% with tr = {"module": "", "resultat": "OK", "actions": ""} %}{% include "_ligne_travaux.html" %}{% endwith %}</template>
+</div>
+
+<div class="carte">
+  <div class="titre-carte"><h2><span class="section-num">04</span>Résultat global de l'intervention</h2>
+    <span class="aide">actions de la bibliothèque ou saisies, modifiables</span></div>
+  <ol class="elements" id="liste-resultat">{% for x in i.resultat %}<li>{% with nom = "resultat", valeur = x, perso = false %}{% include "_element_ri.html" %}{% endwith %}</li>{% endfor %}</ol>
+  {% if modifiable %}<button type="button" class="bouton petit fantome" onclick="ajouterElement('resultat', '', true)">+ Action saisie à la main</button>{% endif %}
+  <div class="champ" style="margin:14px 0 0;max-width:220px"><label for="sg">Statut global</label>
+    <select id="sg" name="statut_global">{% for st in STATUTS %}<option {{ 'selected' if i.statut_global == st }}>{{ st }}</option>{% endfor %}</select></div>
+</div>
+
+<div class="carte">
+  <div class="titre-carte"><h2><span class="section-num">05</span>Points bloquants / anomalies constatées</h2></div>
+  <div id="points">{% for p in i.points_bloquants %}{% include "_point_bloquant.html" %}{% endfor %}</div>
+  {% if modifiable %}<button type="button" class="bouton petit fantome" onclick="ajouterLigne('points', 'modele-point')">+ Ajouter un point bloquant</button>{% endif %}
+  <template id="modele-point">{% with p = {"probleme": "", "impact": "", "action": "", "responsable": "", "echeance": none, "plan_action": false} %}{% include "_point_bloquant.html" %}{% endwith %}</template>
+</div>
+
+<div class="carte">
+  <div class="titre-carte"><h2><span class="section-num">06</span>Recommandations</h2><span class="aide">bibliothèque, onglet « Recommandations »</span></div>
+  <ol class="elements" id="liste-recommandation">{% for x in i.recommandations %}<li>{% with nom = "recommandation", valeur = x, perso = false %}{% include "_element_ri.html" %}{% endwith %}</li>{% endfor %}</ol>
+  {% if modifiable %}<button type="button" class="bouton petit fantome" onclick="ajouterElement('recommandation', '', true)">+ Recommandation saisie à la main</button>{% endif %}
+</div>
+</fieldset>
+
+{% if modifiable %}
+<div class="barre-enregistrer">
+  <button class="bouton" type="submit">Enregistrer</button>
+  <span class="aide">Puis « Générer le rapport » en haut de page.</span>
+  <span style="margin-left:auto"></span>
+</div>
+{% endif %}
+</form>
+
+{% if modifiable %}
+<aside class="panneau-biblio" aria-label="Bibliothèque">
+  <div class="entete-biblio">
+    <strong>Bibliothèque</strong><span class="aide" id="biblio-type"></span>
+  </div>
+  <div class="segments onglets-biblio">
+    <a href="#" class="actif" data-genre="action">Actions</a><a href="#" data-genre="recommandation">Recommandations</a>
+  </div>
+  <input type="search" id="biblio-recherche" placeholder="Rechercher…" aria-label="Rechercher dans la bibliothèque">
+  <div id="biblio-liste" class="biblio-liste"></div>
+  <p class="aide" style="margin:10px 2px 0">Clic sur un élément : il s'ajoute à la liste, où vous pouvez le modifier.
+    <a href="/bibliotheque" target="_blank">Gérer la bibliothèque ↗</a></p>
+</aside>
+{% endif %}
+</div>
+<form method="post" action="/interventions/{{ i.id }}/supprimer" style="margin-top:10px" onsubmit="return confirm('Supprimer ce brouillon ?')">
+  {% if modifiable and not i.pdf %}<input type="hidden" name="csrf" value="{{ csrf }}"><button class="bouton petit danger" type="submit">Supprimer le brouillon</button>{% endif %}
+</form>
+
+<template id="modele-element-resultat"><li>{% with nom = "resultat", valeur = "", perso = true %}{% include "_element_ri.html" %}{% endwith %}</li></template>
+<template id="modele-element-recommandation"><li>{% with nom = "recommandation", valeur = "", perso = true %}{% include "_element_ri.html" %}{% endwith %}</li></template>
+
+<script>
+const BIBLIO = {{ bibliotheque | safe }};
+let genre = "action";
+const champType = document.getElementById("type");
+
+function ajouterIntervenant(nom) {
+  const zone = document.getElementById("intervenants");
+  const lignes = zone.value.split("\n").map(s => s.trim()).filter(Boolean);
+  if (!lignes.includes(nom)) { lignes.push(nom); zone.value = lignes.join("\n"); }
+}
+function ajouterLigne(conteneur, modele) {
+  const cible = document.getElementById(conteneur);
+  (cible.querySelector("tbody") || cible).appendChild(document.getElementById(modele).content.cloneNode(true));
+}
+function ajouterElement(nom, texte, perso) {
+  const li = document.getElementById("modele-element-" + nom).content.cloneNode(true);
+  const champ = li.querySelector("input[type=text]");
+  champ.value = texte;
+  if (!perso) li.querySelector(".biblio-case").hidden = true;
+  document.getElementById("liste-" + nom).appendChild(li);
+  const ajoute = document.getElementById("liste-" + nom).lastElementChild.querySelector("input[type=text]");
+  ajoute.focus();
+  ajoute.closest("li").classList.add("nouveau");
+}
+function retirer(bouton) { bouton.closest("li, tr, .point-bloquant").remove(); }
+function deplacer(bouton, sens) {
+  const li = bouton.closest("li");
+  if (sens < 0 && li.previousElementSibling) li.parentNode.insertBefore(li, li.previousElementSibling);
+  if (sens > 0 && li.nextElementSibling) li.parentNode.insertBefore(li.nextElementSibling, li);
+}
+function basculer(caseACocher) { caseACocher.nextElementSibling.value = caseACocher.checked ? "1" : "0"; }
+
+function afficherBibliotheque() {
+  const type = champType.value, recherche = document.getElementById("biblio-recherche").value.trim().toLowerCase();
+  const option = champType.options[champType.selectedIndex];
+  document.getElementById("biblio-type").textContent = option.textContent;
+  document.getElementById("titre-doc").textContent = option.dataset.titre;
+  const elements = ((BIBLIO[type] || {})[genre] || []).filter(e => !recherche || e.libelle.toLowerCase().includes(recherche) || e.categorie.toLowerCase().includes(recherche));
+  const cible = document.getElementById("biblio-liste");
+  cible.innerHTML = "";
+  if (!elements.length) { cible.innerHTML = '<p class="aide">Aucun élément.</p>'; return; }
+  const groupes = {};
+  elements.forEach(e => (groupes[e.categorie] = groupes[e.categorie] || []).push(e));
+  Object.entries(groupes).forEach(([categorie, liste]) => {
+    const titre = document.createElement("div"); titre.className = "biblio-cat"; titre.textContent = categorie; cible.appendChild(titre);
+    liste.forEach(e => {
+      const b = document.createElement("button"); b.type = "button"; b.className = "biblio-element"; b.textContent = e.libelle;
+      b.addEventListener("click", () => { ajouterElement(genre === "action" ? "resultat" : "recommandation", e.libelle, false); b.classList.add("utilise"); });
+      cible.appendChild(b);
+    });
+  });
+}
+if (document.getElementById("biblio-liste")) {
+  champType.addEventListener("change", afficherBibliotheque);
+  document.getElementById("biblio-recherche").addEventListener("input", afficherBibliotheque);
+  document.querySelectorAll(".onglets-biblio a").forEach(a => a.addEventListener("click", ev => {
+    ev.preventDefault(); genre = a.dataset.genre;
+    document.querySelectorAll(".onglets-biblio a").forEach(x => x.classList.toggle("actif", x === a));
+    afficherBibliotheque();
+  }));
+  afficherBibliotheque();
+}
+</script>
+{% endif %}
+{% endblock %}

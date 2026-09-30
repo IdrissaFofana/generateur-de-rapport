@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>{{ i.titre }} {{ i.numero }} — {{ i.client.nom }}</title>
+<style>
+{{ css | safe }}
+@page { margin: 2.9cm 2cm 2cm 2cm;
+  @top-center { content: element(entete); }
+  @bottom-center { content: "{{ i.titre }} {{ i.numero }} — {{ presta.nom }} · Confidentiel     ·     Page " counter(page) " / " counter(pages); } }
+@page :first { @top-center { content: element(entete); } @bottom-center { content: "{{ i.titre }} {{ i.numero }} — {{ presta.nom }} · Confidentiel     ·     Page " counter(page) " / " counter(pages); } }
+.entete { align-items: center; }
+.entete img { height: 1.05cm; }
+.titre-doc { margin: 0.1cm 0 0.45cm; background: var(--c1); color: #fff; padding: 12pt 16pt; border-bottom: 3pt solid var(--c3);
+             display: flex; justify-content: space-between; align-items: flex-end; }
+.titre-doc .t { font-size: 19pt; font-weight: bold; line-height: 1.1; }
+.titre-doc .n { font-size: 10pt; text-align: right; line-height: 1.35; color: #DCEAF2; }
+.titre-doc .n strong { color: #fff; font-size: 11.5pt; }
+table.fiche { width: 100%; border-collapse: collapse; margin-bottom: 0.45cm; font-size: 9.8pt; }
+table.fiche td { padding: 5pt 8pt; border: 0.5pt solid var(--filet); vertical-align: top; }
+table.fiche td.l { width: 3.3cm; background: var(--fond-clair); color: var(--c1); font-weight: bold; }
+h2.s { font-size: 12.5pt; color: var(--c1); margin: 14pt 0 6pt; padding-bottom: 3pt; border-bottom: 1pt solid var(--c3); page-break-after: avoid; }
+h2.s .no { color: var(--c2); margin-right: 5pt; }
+ul.puces { margin: 0 0 6pt; padding-left: 14pt; }
+ul.puces li { margin: 2pt 0; }
+.statut-global { display: inline-block; font-weight: bold; padding: 3pt 10pt; border: 1.2pt solid; border-radius: 3pt; }
+.statut-global.ok { color: var(--bon); } .statut-global.partiel { color: var(--modere); } .statut-global.echec { color: var(--critique); }
+table.donnees td, table.donnees th { font-size: 9.6pt; }
+.neant { color: var(--encre-douce); font-style: italic; }
+.reco { background: var(--fond-clair); border-left: 3pt solid var(--c2); padding: 7pt 10pt 7pt 8pt; }
+.reco ol { margin: 0; padding-left: 16pt; }
+.reco li { margin: 2pt 0; }
+.signature { margin-top: 18pt; }
+.st-partiel { color: var(--modere); } .st-echec { color: var(--critique); }
+</style>
+</head>
+<body>
+<div class="entete">
+  <img src="logo.png" alt="{{ presta.nom }}">
+  <img src="kaspersky-partenaire.png" alt="Kaspersky Gold Partner">
+</div>
+
+<div class="titre-doc">
+  <div class="t">{{ i.titre | upper }}</div>
+  <div class="n"><strong>{{ i.numero }}</strong><br>{{ date_rapport | fdate }}</div>
+</div>
+
+<table class="fiche">
+  <tr><td class="l">Client</td><td>{{ i.client.nom }}</td><td class="l">Prestataire</td><td>{{ presta.nom_complet }}</td></tr>
+  <tr><td class="l">Interlocuteur</td><td>{{ i.interlocuteur or "—" }}</td><td class="l">Intervenant(s)</td><td>{{ i.intervenants | join(", ") or "—" }}</td></tr>
+  <tr><td class="l">Date</td><td>{% if i.date_debut == i.date_fin %}Le {{ i.date_debut.strftime("%d/%m/%Y") }}{% else %}Du {{ i.date_debut.strftime("%d/%m/%Y") }} au {{ i.date_fin.strftime("%d/%m/%Y") }}{% endif %}
+      {%- if i.heure_debut %}<br>De {{ i.heure_debut.strftime("%Hh%M") }}{% if i.heure_fin %} à {{ i.heure_fin.strftime("%Hh%M") }}{% endif %}{% endif %}</td>
+      <td class="l">Type · mode</td><td>{{ i.libelle_type }} · {{ MODES.get(i.mode, i.mode) }}</td></tr>
+</table>
+
+{% set n = namespace(v=0) %}
+{% macro titre(texte) %}{% set n.v = n.v + 1 %}<h2 class="s"><span class="no">{{ n.v }}.</span>{{ texte }}</h2>{% endmacro %}
+
+{{ titre("Objet de l'intervention") }}
+{% if i.objet %}{{ i.objet | md }}{% else %}<p class="neant">—</p>{% endif %}
+
+{% set cx = i.contexte %}
+{% if cx.postes or cx.serveurs or cx.systemes or cx.version_ksc or cx.autres %}
+{{ titre("Contexte et environnement initial") }}
+<ul class="puces">
+  {% if cx.postes or cx.serveurs %}<li><strong>Appareils concernés :</strong> {{ cx.postes or "—" }} poste(s), {{ cx.serveurs or "—" }} serveur(s)</li>{% endif %}
+  {% if cx.systemes %}<li><strong>Systèmes d'exploitation :</strong> {{ cx.systemes }}</li>{% endif %}
+  {% if cx.version_ksc %}<li><strong>Version de Kaspersky Security Center :</strong> {{ cx.version_ksc }}</li>{% endif %}
+  {% if cx.autres %}<li>{{ cx.autres }}</li>{% endif %}
+</ul>
+{% endif %}
+
+{% if i.travaux %}
+{{ titre("Travaux réalisés / modules concernés") }}
+<table class="donnees">
+<thead><tr><th>Module / solution</th><th class="c">Résultat</th><th>Actions effectuées</th></tr></thead>
+<tbody>{% for t in i.travaux %}<tr><td><strong>{{ t.module }}</strong></td><td class="c">{{ t.resultat | statut }}</td><td>{{ t.actions | md_ligne }}</td></tr>{% endfor %}</tbody>
+</table>
+{% endif %}
+
+{{ titre("Résultat global de l'intervention") }}
+{% if i.resultat %}<ul class="puces">{% for r in i.resultat %}<li>{{ r | md_ligne }}</li>{% endfor %}</ul>
+{% else %}<p class="neant">Aucune action détaillée.</p>{% endif %}
+<p>Statut global : <span class="statut-global {{ i.statut_global | slug }}">{{ "✔ " if i.statut_global == "OK" }}{{ i.statut_global }}</span></p>
+
+{{ titre("Points bloquants / anomalies constatées") }}
+{% if i.points_bloquants %}
+<table class="donnees">
+<thead><tr><th>Blocage / problème</th><th>Impact / conséquence</th><th>Action corrective</th><th>Responsable</th><th>Échéance</th></tr></thead>
+<tbody>{% for p in i.points_bloquants %}<tr><td><strong>{{ p.probleme }}</strong></td><td>{{ p.impact or "—" }}</td><td>{{ p.action or "—" }}</td>
+<td>{{ p.responsable or "—" }}</td><td class="nobr">{{ p.echeance | fdate_courte if p.echeance else "—" }}</td></tr>{% endfor %}</tbody>
+</table>
+{% else %}<p class="neant">Aucun point bloquant constaté.</p>{% endif %}
+
+{{ titre("Recommandations") }}
+{% if i.recommandations %}<div class="reco"><ol>{% for r in i.recommandations %}<li>{{ r | md_ligne }}</li>{% endfor %}</ol></div>
+{% else %}<p class="neant">Aucune recommandation particulière.</p>{% endif %}
+
+<div class="signature">
+  <div class="nom">{{ i.intervenants | join(", ") or presta.signataire }}</div>
+  <div class="societe">{{ presta.nom_complet }}</div>
+</div>
+</body>
+</html>

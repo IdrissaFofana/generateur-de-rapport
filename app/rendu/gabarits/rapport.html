@@ -131,6 +131,15 @@
 </table>
 <p class="note">* {{ "Évolution par rapport au mois précédent." if d.precedents else "Premier rapport de la série : l'évolution sera calculée à partir du mois prochain." }}</p>
 
+{% if graphiques.evolution %}
+<p><strong>Évolution sur {{ points_evolution | length }} mois</strong></p>
+<table class="donnees petit risque-mois">
+<tr>{% for pt in points_evolution %}<th class="c">{{ pt.libelle }}</th>{% endfor %}</tr>
+<tr>{% for pt in points_evolution %}<td class="c">{{ (pt.niveau or "—") | statut }}</td>{% endfor %}</tr>
+</table>
+{{ figure("evolution", "Évolution des indicateurs clés (rapports mensuels validés)") }}
+{% endif %}
+
 {% set urgentes = c.actions | selectattr("priorite", "equalto", "Urgente") | list %}
 {% set prio = (urgentes or c.actions)[:3] %}
 {% if prio %}

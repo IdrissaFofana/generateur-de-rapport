@@ -30,12 +30,19 @@ OS_FIN_SUPPORT = {
     "Windows Server 2012": date(2023, 10, 10), "Windows Server 2016": date(2027, 1, 12),
 }
 MOTS_NEUTRALISE = ("bloqué", "empêché", "supprimé", "désinfecté", "quarantaine", "interdit")
+# Un hebdo MDR couvre une semaine du lundi au lundi et paraît quelques jours après
+DELAI_PUBLICATION_HEBDO = 3
+
+
+def hebdo_disponible_le(jour):
+    """Date à partir de laquelle l'hebdo couvrant ce jour peut avoir été publié."""
+    return jour + timedelta(days=7 - jour.weekday() + DELAI_PUBLICATION_HEBDO)
 
 
 # --------------------------------------------------------------------------- #
 # MDR (rapports hebdomadaires)
 # --------------------------------------------------------------------------- #
-def analyser_mdr(hebdos, tenants, debut, fin):
+def analyser_mdr(hebdos, tenants, debut, fin, aujourd_hui=None):
     jours, trouve = {}, False
     for h in hebdos:  # les plus récents écrasent les plus anciens
         for tenant, serie in h["postes"].items():
@@ -46,6 +53,9 @@ def analyser_mdr(hebdos, tenants, debut, fin):
                         jours[j] = n
     tous = [debut + timedelta(d) for d in range((fin - debut).days)]
     manquants = [j for j in tous if j not in jours]
+    # Jours dont l'hebdo ne peut pas encore exister (mois en cours) : attendus, pas manquants
+    aujourd_hui = aujourd_hui or date.today()
+    a_venir = [j for j in manquants if hebdo_disponible_le(j) > aujourd_hui]
 
     incidents = {}
     for h in hebdos:
@@ -65,6 +75,7 @@ def analyser_mdr(hebdos, tenants, debut, fin):
         "tenant_trouve": trouve,
         "jours": sorted(jours.items()),
         "jours_manquants": manquants,
+        "jours_a_venir": a_venir,
         "moyenne": sum(valeurs) / len(valeurs) if valeurs else 0,
         "moyenne_ouvres": sum(ouvres) / len(ouvres) if ouvres else 0,
         "max": max(valeurs) if valeurs else 0,
@@ -452,10 +463,16 @@ def consolider(client, annee, mois, hebdos, exports, precedents=None):
 
     if d["avec_mdr"]:
         d["mdr"] = analyser_mdr(hebdos, set(client.get("tenants_mdr", [])), debut, fin)
-        if d["mdr"]["jours_manquants"]:
-            j = d["mdr"]["jours_manquants"]
+        a_venir = set(d["mdr"]["jours_a_venir"])
+        j = [x for x in d["mdr"]["jours_manquants"] if x not in a_venir]
+        if j:
             avertissements.append(f"Données MDR manquantes pour {len(j)} jour(s) du mois "
                                   f"({fmt_date(j[0])} → {fmt_date(j[-1])}) : ajouter le(s) rapport(s) hebdomadaire(s) correspondant(s).")
+        if a_venir:
+            j = sorted(a_venir)
+            avertissements.append(f"Données MDR du {fmt_date(j[0])} au {fmt_date(j[-1])} pas encore disponibles : "
+                                  f"le rapport hebdomadaire couvrant ces jours paraîtra à partir du "
+                                  f"{fmt_date(hebdo_disponible_le(j[-1]))}.")
 
     for typ, donnees in exports.items():
         genere = datetime.fromisoformat(donnees["genere_le"]).date() if donnees.get("genere_le") else None

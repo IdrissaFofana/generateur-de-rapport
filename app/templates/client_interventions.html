@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block titre %}Interventions — {{ client.nom }}{% endblock %}
+{% block contenu %}
+<a class="retour" href="/interventions">Toutes les interventions</a>
+<div class="en-tete">
+  <div><div class="surtitre">Historique des interventions · code {{ client.code_rapport }}</div>
+  <h1>{{ client.nom }}</h1>
+  <div class="meta"><span class="pastille profil">{{ client.profil }}</span>
+    <span class="aide">{{ lignes | length }} intervention(s){% if lignes %} depuis le {{ lignes[-1].date_debut | fdate }}{% endif %}</span></div></div>
+  {% if utilisateur.peut("operateur") %}
+  <form method="post" action="/interventions" class="en-ligne">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="client_id" value="{{ client.id }}">
+    <select name="type" aria-label="Type d'intervention">{% for cle, (lib, titre) in TYPES.items() %}<option value="{{ cle }}">{{ lib }}</option>{% endfor %}</select>
+    <button class="bouton fleche" type="submit">Nouveau rapport</button>
+  </form>
+  {% endif %}
+</div>
+
+{% if not lignes %}
+<div class="carte etat-vide"><div class="hex-vide"></div>
+  <div><h2>Aucune intervention enregistrée</h2><p class="aide">Chaque intervention chez {{ client.nom }} apparaîtra ici, de la plus récente à la plus ancienne.</p></div></div>
+{% else %}
+<ol class="chronologie">
+{% for i in lignes %}
+{% if loop.first or i.date_debut.year != loop.previtem.date_debut.year %}<li class="annee">{{ i.date_debut.year }}</li>{% endif %}
+<li class="evenement {{ {'OK': 'ok', 'Partiel': 'partiel', 'Échec': 'echec'}.get(i.statut_global) }}">
+  <div class="date-evt"><span class="jour">{{ i.date_debut.strftime("%d") }}</span><span class="mois-evt">{{ MOIS_COURTS[i.date_debut.month - 1] }}</span></div>
+  <div class="carte corps-evt">
+    <div class="en-ligne" style="justify-content:space-between">
+      <div><a href="/interventions/{{ i.id }}" class="titre-evt">{{ i.titre }}</a> <span class="etiquette">{{ i.numero }}</span></div>
+      <div class="en-ligne">
+        <span class="pastille {{ {'OK': 'ok', 'Partiel': 'alerte', 'Échec': 'erreur'}.get(i.statut_global) }}">{{ i.statut_global }}</span>
+        {% if i.envoye_le %}<span class="etiquette ok">envoyé</span>{% elif i.statut != "valide" %}<span class="etiquette">brouillon</span>{% endif %}
+      </div>
+    </div>
+    {% if i.objet %}<p class="aide" style="margin:6px 0 0">{{ i.objet | replace("**", "") | truncate(220) }}</p>{% endif %}
+    <div class="meta-evt aide">{{ MODES_LIB.get(i.mode, i.mode) }} · {{ i.intervenants | join(", ") }}
+      {% if i.date_fin != i.date_debut %} · jusqu'au {{ i.date_fin | fdate }}{% endif %}
+      {% if i.resultat %} · {{ i.resultat | length }} action(s){% endif %}
+      {% if i.points_bloquants %} · <strong style="color:var(--alerte)">{{ i.points_bloquants | length }} point(s) bloquant(s)</strong>{% endif %}</div>
+  </div>
+</li>
+{% endfor %}
+</ol>
+{% endif %}
+{% endblock %}

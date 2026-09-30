@@ -13,6 +13,11 @@ from .commun import flash, page, rediriger
 routes = APIRouter()
 
 
+def accueil(u):
+    """Page d'arrivée selon le rôle : la production pour ceux qui la font, la vue d'ensemble pour les autres."""
+    return "/production" if u.role in ("operateur", "validateur") else "/"
+
+
 @routes.get("/connexion")
 def connexion_form(request: Request):
     return page(request, "connexion.html")
@@ -29,7 +34,7 @@ def connexion(request: Request, email: str = Form(...), mot_de_passe: str = Form
     u.derniere_connexion = datetime.now()
     journaliser(db, u, "connexion")
     db.commit()
-    return rediriger("/mon-compte" if u.doit_changer_mdp else "/")
+    return rediriger("/mon-compte" if u.doit_changer_mdp else accueil(u))
 
 
 @routes.get("/deconnexion")
@@ -68,4 +73,4 @@ def mon_compte(request: Request, actuel: str = Form(...), nouveau: str = Form(..
     journaliser(db, u, "changement de mot de passe")
     db.commit()
     flash(request, "Mot de passe modifié.")
-    return rediriger("/")
+    return rediriger(accueil(u))

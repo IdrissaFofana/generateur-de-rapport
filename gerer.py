@@ -1,27 +1,29 @@
 """Commandes d'administration de la plateforme.
 
-    python gerer.py init                                   crée les tables
+    python gerer.py init                                   crée ou met à jour les tables (migrations)
     python gerer.py creer-admin <email> "<Nom>"            crée un administrateur (mot de passe provisoire affiché)
     python gerer.py importer-clients <config.json>         importe les clients du générateur en ligne de commande
+    python gerer.py alertes                                évalue les alertes et envoie les notifications (tâche quotidienne)
+    python gerer.py resume-hebdo [--forcer]                envoie le résumé hebdomadaire (une fois par semaine)
 """
 import json
 import sys
 
 from sqlalchemy import select
 
-from app.db import Session, creer_tables
+from app.db import Session, migrer
 from app.modeles import Client, Utilisateur, journaliser
 from app.securite import hacher
 from app.web.admin import mot_de_passe_provisoire
 
 
 def init():
-    creer_tables()
-    print("Tables créées (ou déjà présentes).")
+    migrer()
+    print("Base à jour (migrations appliquées).")
 
 
 def creer_admin(email, nom):
-    creer_tables()
+    migrer()
     email = email.strip().lower()
     with Session() as db:
         if db.scalar(select(Utilisateur).where(Utilisateur.email == email)):
@@ -35,7 +37,7 @@ def creer_admin(email, nom):
 
 
 def importer_clients(chemin):
-    creer_tables()
+    migrer()
     with open(chemin, encoding="utf-8") as f:
         config = json.load(f)
     with Session() as db:
@@ -50,8 +52,29 @@ def importer_clients(chemin):
         db.commit()
 
 
+def evaluer_alertes():
+    from app import alertes
+    migrer()
+    with Session() as db:
+        nouvelles = alertes.evaluer_et_notifier(db, en_arriere_plan=False)
+    print(f"{len(nouvelles)} nouvelle(s) alerte(s).")
+    for a in nouvelles:
+        print(f"  [{a.niveau}] {a.titre}")
+
+
+def resume_hebdo(*options):
+    from app import alertes
+    migrer()
+    with Session() as db:
+        envoye, message = alertes.envoyer_resume(db, forcer="--forcer" in options)
+    print(message)
+    if not envoye and "déjà envoyé" not in message:
+        sys.exit(1)
+
+
 if __name__ == "__main__":
-    commandes = {"init": init, "creer-admin": creer_admin, "importer-clients": importer_clients}
+    commandes = {"init": init, "creer-admin": creer_admin, "importer-clients": importer_clients,
+                 "alertes": evaluer_alertes, "resume-hebdo": resume_hebdo}
     if len(sys.argv) < 2 or sys.argv[1] not in commandes:
         sys.exit(__doc__)
     commandes[sys.argv[1]](*sys.argv[2:])

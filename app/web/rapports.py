@@ -6,10 +6,11 @@ from fastapi.responses import FileResponse, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session as SessionDB
 
-from .. import services
+from .. import alertes, services
 from ..config import PRESTATAIRE
 from ..db import session_db
 from ..modeles import BROUILLON, VALIDE, Client, Rapport, journaliser
+from ..moteur import bilan as mbilan
 from ..moteur.redaction import STATUTS_ACTION
 from ..rendu.word import docx_rapport
 from ..securite import exiger, verifier_csrf
@@ -29,6 +30,12 @@ def _rapport(db, rid, u):
     if r.statut != VALIDE and not u.peut("operateur"):
         raise HTTPException(403, "Seuls les rapports validés sont accessibles avec le rôle Lecteur.")
     return r
+
+
+def _ref(r):
+    """« HUDSON 09/2026 v2 » pour un mensuel, « HUDSON T3 2026 v1 » pour un bilan (journal)."""
+    periode = f"{r.mois:02d}/{r.annee}" if r.periodicite == "mensuel" else services.libelle_rapport(r)
+    return f"{r.client.nom} {periode} v{r.version}"
 
 
 def _pdf(contenu, nom, telecharger=False):
@@ -59,6 +66,10 @@ def relecture(request: Request, rid: int, u=Depends(lecteur), db: SessionDB = De
                                                 Rapport.annee == r.annee, Rapport.mois == r.mois)
                           .order_by(Rapport.version.desc())).all()
     modifiable = r.statut == BROUILLON and u.peut("validateur")
+    if r.periodicite != "mensuel":
+        return page(request, "relecture_bilan.html", u, r=r, c=r.contenu, d=r.donnees, versions=versions,
+                    modifiable=modifiable, NIVEAUX=NIVEAUX_RISQUE, libelle=services.libelle_rapport(r),
+                    section="bilans")
     return page(request, "relecture.html", u, r=r, c=r.contenu, d=r.donnees, versions=versions, modifiable=modifiable,
                 PRIORITES=PRIORITES, STATUTS=STATUTS_ACTION, NIVEAUX=NIVEAUX_RISQUE)
 
@@ -74,6 +85,17 @@ async def enregistrer(request: Request, rid: int, u=Depends(validateur), db: Ses
         raise HTTPException(400, "Ce rapport est validé : créez une nouvelle version pour le modifier.")
     f = await request.form()
     niveau = f.get("niveau_risque", "")
+    if r.periodicite != "mensuel":
+        r.contenu = {
+            **r.contenu,
+            "niveau_risque": niveau if niveau in NIVEAUX_RISQUE else r.contenu["niveau_risque"],
+            "motifs_risque": [m.strip() for m in f.get("motifs_risque", "").splitlines() if m.strip()],
+            **{k: f.get(k, "").strip() for k in ("synthese", "commentaire_evolution", "perspectives", "conclusion")},
+        }
+        journaliser(db, u, "modification brouillon", _ref(r))
+        db.commit()
+        flash(request, "Modifications enregistrées.")
+        return rediriger(f"/rapports/{rid}")
     actions = [{"action": a, "pourquoi": p, "priorite": pr if pr in PRIORITES else "Normale", "responsable": re_,
                 "statut": "À faire"}
                for a, p, pr, re_ in zip(_liste(f, "action"), _liste(f, "pourquoi"), _liste(f, "priorite"),
@@ -94,7 +116,7 @@ async def enregistrer(request: Request, rid: int, u=Depends(validateur), db: Ses
         "actions": actions,
         "suivi": suivi,
     }
-    journaliser(db, u, "modification brouillon", f"{r.client.nom} {r.mois:02d}/{r.annee} v{r.version}")
+    journaliser(db, u, "modification brouillon", _ref(r))
     db.commit()
     flash(request, "Modifications enregistrées.")
     return rediriger(f"/rapports/{rid}")
@@ -108,11 +130,15 @@ async def actualiser(request: Request, rid: int, u=Depends(operateur), db: Sessi
     reinitialiser = (await request.form()).get("reinitialiser") == "1"
     if reinitialiser and not u.peut("validateur"):
         raise HTTPException(403, "La réinitialisation des textes est réservée aux validateurs.")
-    services.actualiser_brouillon(db, r, reinitialiser)
+    if r.periodicite == "mensuel":
+        services.actualiser_brouillon(db, r, reinitialiser)
+    else:
+        services.actualiser_bilan(db, r, reinitialiser)
     journaliser(db, u, "actualisation brouillon" + (" (textes réinitialisés)" if reinitialiser else ""),
-                f"{r.client.nom} {r.mois:02d}/{r.annee} v{r.version}")
+                _ref(r))
     db.commit()
-    flash(request, "Chiffres recalculés à partir des fichiers déposés."
+    flash(request, ("Chiffres recalculés à partir des fichiers déposés." if r.periodicite == "mensuel"
+                    else "Bilan recalculé à partir des rapports mensuels validés.")
                    + (" Les textes ont été régénérés." if reinitialiser else " Vos textes ont été conservés."))
     return rediriger(f"/rapports/{rid}")
 
@@ -131,8 +157,10 @@ def valider(request: Request, rid: int, u=Depends(validateur), db: SessionDB = D
     if r.statut != BROUILLON:
         raise HTTPException(400, "Ce rapport est déjà validé.")
     services.valider(db, r, u)
-    journaliser(db, u, "validation rapport", f"{r.client.nom} {r.mois:02d}/{r.annee} v{r.version}")
+    journaliser(db, u, "validation rapport", _ref(r))
     db.commit()
+    if r.periodicite == "mensuel":
+        alertes.evaluer_et_notifier(db)  # niveau critique, hausse des détections
     flash(request, f"Rapport v{r.version} validé : le PDF définitif est archivé.")
     return rediriger(f"/rapports/{rid}")
 
@@ -140,12 +168,16 @@ def valider(request: Request, rid: int, u=Depends(validateur), db: SessionDB = D
 @routes.post("/rapports/{rid}/nouvelle-version", dependencies=[Depends(verifier_csrf)])
 def nouvelle_version(request: Request, rid: int, u=Depends(validateur), db: SessionDB = Depends(session_db)):
     r = _rapport(db, rid, u)
-    dernier = services.dernier_rapport(db, r.client_id, r.annee, r.mois)
+    dernier = services.dernier_rapport(db, r.client_id, r.annee, r.mois, periodicite=r.periodicite)
     if dernier.statut == BROUILLON:
         flash(request, f"Un brouillon (v{dernier.version}) existe déjà.", "info")
         return rediriger(f"/rapports/{dernier.id}")
-    nouveau = services.creer_brouillon(db, r.client, r.annee, r.mois, u, base=r)
-    journaliser(db, u, "nouvelle version", f"{r.client.nom} {r.mois:02d}/{r.annee} v{nouveau.version}")
+    if r.periodicite == "mensuel":
+        nouveau = services.creer_brouillon(db, r.client, r.annee, r.mois, u, base=r)
+    else:
+        nouveau = services.creer_bilan(db, r.client, r.periodicite, r.annee,
+                                       mbilan.numero_periode(r.periodicite, r.mois), u, base=r)
+    journaliser(db, u, "nouvelle version", _ref(nouveau))
     db.commit()
     flash(request, f"Version v{nouveau.version} créée en brouillon, avec les textes de la v{r.version}.")
     return rediriger(f"/rapports/{nouveau.id}")
@@ -163,8 +195,10 @@ def telecharger_pdf(rid: int, u=Depends(lecteur), db: SessionDB = Depends(sessio
 def telecharger_word(rid: int, u=Depends(operateur), db: SessionDB = Depends(session_db)):
     """Export Word de dépannage (mêmes données et textes que le PDF)."""
     r = _rapport(db, rid, u)
+    if r.periodicite != "mensuel":
+        raise HTTPException(400, "L'export Word n'existe que pour les rapports mensuels.")
     contenu = docx_rapport(r.donnees, r.contenu, PRESTATAIRE, (r.valide_le or r.cree_le).date())
-    journaliser(db, u, "export Word", f"{r.client.nom} {r.mois:02d}/{r.annee} v{r.version}")
+    journaliser(db, u, "export Word", _ref(r))
     db.commit()
     nom = services.nom_fichier_rapport(r, "docx")
     return Response(contenu, media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",

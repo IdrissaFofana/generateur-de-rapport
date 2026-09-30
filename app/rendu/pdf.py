@@ -5,7 +5,7 @@ import shutil
 import subprocess
 import tempfile
 import unicodedata
-from datetime import date
+from datetime import date, datetime
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markupsafe import Markup, escape
@@ -192,12 +192,31 @@ def statut_taux(part, total, seuils=(0, 0.1, 0.3)):
     return "Critique" if taux > seuils[2] else "Élevé" if taux > seuils[1] else "Modéré"
 
 
+INDICATEURS_EVOLUTION = [
+    ("appareils_critiques", "Appareils en état critique"),
+    ("detections", "Menaces détectées"),
+    ("vulnerabilites_critiques", "Vulnérabilités critiques"),
+    ("postes_mdr_moyenne", "Postes supervisés MDR (moyenne)"),
+]
+MOIS_COURTS = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."]
+
+
+def points_evolution(d, contenu):
+    """Mois précédents validés (figés dans les données) + mois du rapport."""
+    courant = {"libelle": f"{MOIS_COURTS[d['mois'] - 1]} {str(d['annee'])[2:]}", "niveau": contenu.get("niveau_risque"),
+               "indicateurs": d.get("indicateurs") or {}}
+    return (d.get("historique") or []) + [courant]
+
+
 def html_rapport(d, contenu, prestataire, date_rapport=None, apercu=False):
     """d : données consolidées (JSON) · contenu : textes modifiables · prestataire : config charte."""
     numeros, titres, sommaire = construire_plan(d, contenu)
+    g = graphiques.tous(d, "svg")
+    points = points_evolution(d, contenu)
+    g["evolution"] = graphiques.evolution(points, INDICATEURS_EVOLUTION, "svg")
     return _env.get_template("rapport.html").render(
         d=d, c=contenu, presta=prestataire, numeros=numeros, titres=titres, sommaire=sommaire,
-        graphiques=graphiques.tous(d, "svg"), evolution=lambda cle: evolution(d, cle),
+        graphiques=g, points_evolution=points, evolution=lambda cle: evolution(d, cle),
         statut_taux=statut_taux, mois=fmt_mois(d["annee"], d["mois"]),
         date_rapport=(date_rapport or date.today()).isoformat(), apercu=apercu,
         css=open(os.path.join(ICI, "gabarits", "rapport.css"), encoding="utf-8").read(),
@@ -228,3 +247,50 @@ def pdf_depuis_html(html):
             with open(sortie, "rb") as f:
                 return f.read()
     return HTML(string=html, base_url=base).write_pdf()
+
+
+# --------------------------------------------------------------------------- #
+# Bilans trimestriels et semestriels
+# --------------------------------------------------------------------------- #
+def construire_plan_bilan(d):
+    plan = [("synthese", "Synthèse de la période"), ("evolution", "Évolution des indicateurs")]
+    if d["avec_mdr"]:
+        plan.append(("mdr", "Supervision MDR"))
+    if d["categories_menaces"]:
+        plan.append(("menaces", "Menaces détectées"))
+    if d["applications"]:
+        plan.append(("vulnerabilites", "Vulnérabilités"))
+    plan += [("actions", "Bilan des actions"), ("perspectives", "Perspectives et recommandations"), ("conclusion", "Conclusion")]
+    numeros, titres, sommaire = {}, {}, []
+    for i, (ident, titre) in enumerate(plan, 1):
+        numeros[ident], titres[ident] = f"{i}.", titre
+        sommaire.append({"id": ident, "titre": f"{i}. {titre}", "niveau": 1})
+    for lettre, (ident, titre) in zip("AB", [("annexe-sources", "Rapports mensuels consolidés"), ("annexe-glossaire", "Glossaire")]):
+        numeros[ident], titres[ident] = f"Annexe {lettre} —", titre
+        sommaire.append({"id": ident, "titre": f"Annexe {lettre} — {titre}", "niveau": 1})
+    return numeros, titres, sommaire
+
+
+def html_bilan(d, contenu, prestataire, date_rapport=None, apercu=False):
+    """Bilan trimestriel / semestriel : d = consolidation des mensuels validés (moteur/bilan.py)."""
+    numeros, titres, sommaire = construire_plan_bilan(d)
+    points = [{"libelle": m["court"], "indicateurs": m["indicateurs"]} for m in d["mois"] if m["present"]]
+    return _env.get_template("bilan.html").render(
+        d=d, c=contenu, presta=prestataire, numeros=numeros, titres=titres, sommaire=sommaire,
+        graphique_evolution=graphiques.evolution(points, INDICATEURS_EVOLUTION, "svg"),
+        date_rapport=(date_rapport or date.today()).isoformat(), apercu=apercu,
+        css=open(os.path.join(ICI, "gabarits", "rapport.css"), encoding="utf-8").read(),
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Rapports d'intervention
+# --------------------------------------------------------------------------- #
+def html_intervention(intervention, prestataire):
+    """Rapport d'intervention (titre selon le type), daté du jour de validation."""
+    from ..modeles import MODES_INTERVENTION
+    jour = (intervention.valide_le or datetime.now()).date()
+    return _env.get_template("intervention.html").render(
+        i=intervention, presta=prestataire, MODES=MODES_INTERVENTION, date_rapport=jour.isoformat(),
+        css=open(os.path.join(ICI, "gabarits", "rapport.css"), encoding="utf-8").read(),
+    )

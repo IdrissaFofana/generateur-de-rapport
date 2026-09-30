@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+{% from "_macros.html" import selecteur_mois %}
+{% block titre %}Vue d'ensemble{% endblock %}
+{% block contenu %}
+{% set i = s.indicateurs %}
+{% macro delta(d, inverse=false) %}{% if d is not none %}
+  {% set mieux = (d < 0) if not inverse else (d > 0) %}
+  <span class="delta {{ 'stable' if d == 0 else 'mieux' if mieux else 'pire' }}">{{ "=" if d == 0 else ("▲ +" if d > 0 else "▼ ") ~ (d | string | replace(".", ",")) }}</span>
+{% endif %}{% endmacro %}
+{% macro nb(v) %}{{ "—" if v is none else ("{:,}".format(v) | replace(",", " ")) }}{% endmacro %}
+
+{% set pa, pm = (s.annee - 1, 12) if s.mois == 1 else (s.annee, s.mois - 1) %}
+{% set sa, sm = (s.annee + 1, 1) if s.mois == 12 else (s.annee, s.mois + 1) %}
+{% set suite = "&" ~ filtres if filtres else "" %}
+<div class="en-tete">
+  <div><div class="surtitre">Pilotage du portefeuille</div>
+  <h1>Vue d'ensemble</h1>
+  <p class="sous-titre">Chiffres des rapports mensuels <strong>validés</strong> : {{ s.nb_valides }} client(s) sur {{ s.clients | length }}
+  pour {{ s.libelle | lower }}{% if s.filtree %} · <strong>vue filtrée</strong>{% endif %}.</p></div>
+</div>
+
+<form method="get" action="/" class="barre-filtres" aria-label="Filtres de la vue d'ensemble">
+  <div class="periode">
+    <a href="/?mois={{ pm }}&annee={{ pa }}{{ suite }}" title="Mois précédent" aria-label="Mois précédent">‹</a>
+    <span class="selects">
+      <select name="mois" aria-label="Mois">{% for m in MOIS_FR %}<option value="{{ loop.index }}" {{ 'selected' if loop.index == s.mois }}>{{ m | capitalize }}</option>{% endfor %}</select>
+      <select name="annee" aria-label="Année">{% for a in range(s.annee - 2, s.annee + 2) %}<option {{ 'selected' if a == s.annee }}>{{ a }}</option>{% endfor %}</select>
+    </span>
+    <a href="/?mois={{ sm }}&annee={{ sa }}{{ suite }}" title="Mois suivant" aria-label="Mois suivant">›</a>
+  </div>
+  <label class="filtre"><span>Client</span><select name="client"><option value="">Tous les clients</option>
+    {% for c in s.tous %}<option value="{{ c.id }}" {{ 'selected' if s.filtre.client == c.id }}>{{ c.nom }}</option>{% endfor %}</select></label>
+  <label class="filtre"><span>Profil</span><select name="profil"><option value="">Tous les profils</option>
+    {% for cle, lib in PROFILS.items() %}<option value="{{ cle }}" {{ 'selected' if s.filtre.profil == cle }}>{{ lib }}</option>{% endfor %}</select></label>
+  <button class="bouton" type="submit">Appliquer</button>
+  {% if s.filtree %}<a class="bouton fantome" href="/?mois={{ s.mois }}&annee={{ s.annee }}">Réinitialiser</a>{% endif %}
+</form>
+
+{% if not s.historique_disponible %}
+<div class="carte etat-vide">
+  <div class="hex-vide"></div>
+  <div><h2>{{ "Aucun client ne correspond à ces filtres" if not s.clients else "Les statistiques se construisent avec les rapports validés" }}</h2>
+  <p class="aide">Aucun rapport mensuel validé sur les 12 mois jusqu'à {{ s.libelle | lower }}. Dès le premier rapport validé, cette page affiche
+  les niveaux de risque, les tendances et les comparaisons entre clients ; les courbes apparaissent à partir du deuxième mois.</p>
+  <a class="bouton fleche" href="/production">Aller à la production</a></div>
+</div>
+{% else %}
+
+<div class="indicateurs">
+  <div class="indicateur marine"><div class="valeur">{{ s.nb_valides }}<small>/{{ s.clients | length }}</small></div><div class="libelle">Clients validés ce mois</div></div>
+  <div class="indicateur"><div class="valeur">{{ nb(i.appareils_administres.valeur) }}</div><div class="libelle">Appareils administrés {{ delta(i.appareils_administres.delta, true) }}</div></div>
+  <div class="indicateur critique"><div class="valeur">{{ nb(i.appareils_critiques.valeur) }}</div><div class="libelle">Appareils critiques {{ delta(i.appareils_critiques.delta) }}</div></div>
+  <div class="indicateur critique"><div class="valeur">{{ nb(i.vulnerabilites_critiques.valeur) }}</div><div class="libelle">Vulnérabilités critiques {{ delta(i.vulnerabilites_critiques.delta) }}</div></div>
+  <div class="indicateur alerte"><div class="valeur">{{ nb(i.detections.valeur) }}</div><div class="libelle">Menaces détectées {{ delta(i.detections.delta) }}</div></div>
+  <div class="indicateur {{ 'critique' if i.incidents_mdr.valeur else 'ok' }}"><div class="valeur">{{ nb(i.incidents_mdr.valeur) }}</div><div class="libelle">Incidents MDR {{ delta(i.incidents_mdr.delta) }}</div></div>
+</div>
+
+{# ---------------- Carte de chaleur ---------------- #}
+<div class="carte">
+  <div class="titre-carte"><h2>Niveau de risque par client et par mois</h2><span class="aide">clic sur une case : rapport du mois</span></div>
+  <div class="chaleur-defil"><table class="chaleur">
+    <thead><tr><th></th>{% for c in s.colonnes %}<th class="{{ 'courant' if loop.last }}">{{ c.court }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for ligne in s.chaleur %}<tr>
+      <th><a href="/clients/{{ ligne.client.id }}/{{ s.annee }}/{{ s.mois }}">{{ ligne.client.nom }}</a></th>
+      {% for case in ligne.cases %}{% set col = s.colonnes[loop.index0] %}
+      <td>{% if case %}<a class="case {{ CLASSES.get(case.niveau, '') }}" href="/rapports/{{ case.id }}" title="{{ ligne.client.nom }} — {{ col.long }} : {{ case.niveau }}">{{ (case.niveau or "?")[:1] }}</a>
+          {% else %}<span class="case sans-rapport" title="{{ ligne.client.nom }} — {{ col.long }} : pas de rapport validé"></span>{% endif %}</td>
+      {% endfor %}</tr>{% endfor %}</tbody>
+  </table></div>
+  <div class="legende legende-risque"><span><i class="case critique">C</i> Critique</span><span><i class="case eleve">É</i> Élevé</span>
+    <span><i class="case modere">M</i> Modéré</span><span><i class="case faible">F</i> Faible</span><span><i class="case sans-rapport"></i> Pas de rapport validé</span></div>
+</div>
+
+{# ---------------- Tendances ---------------- #}
+<div class="carte">
+  <div class="titre-carte"><h2>Tendances du portefeuille</h2><span class="aide">somme des clients validés chaque mois</span></div>
+  {% if s.historique_disponible < 2 %}<p class="aide" style="margin:0">Les courbes apparaîtront à partir du deuxième mois validé.</p>
+  {% else %}<div class="courbes">{% for c in courbes_portefeuille %}
+    <figure class="petite-courbe"><figcaption><span>{{ c.titre }}</span>
+      {% if c.variation %}<span class="variation">{{ "▲" if c.variation[0] > 0 else "▼" if c.variation[0] < 0 else "=" }} {{ c.variation[1] }}</span>{% endif %}</figcaption>{{ c.svg }}</figure>
+  {% endfor %}</div>{% endif %}
+</div>
+
+<div class="grille-2">
+  {# ---------------- Classement ---------------- #}
+  <div class="carte">
+    <div class="titre-carte"><h2>Clients les plus exposés</h2><span class="aide">{{ s.libelle | lower }}</span></div>
+    {% if s.classement %}
+    <div class="tableau"><table class="liste classement">
+      <thead><tr><th>Client</th><th>Risque</th><th>App. critiques</th><th>Vuln. crit.</th></tr></thead>
+      <tbody>{% for x in s.classement %}<tr>
+        <td><a class="client" href="/clients/{{ x.client.id }}/{{ s.annee }}/{{ s.mois }}" title="Fiche du client">{{ x.client.nom }}</a></td>
+        <td><a href="/rapports/{{ x.rapport.id }}" title="Rapport de {{ s.libelle | lower }}" class="lien-discret"><span class="pastille {{ {'critique': 'erreur', 'eleve': 'alerte', 'modere': 'alerte', 'faible': 'ok'}.get(CLASSES.get(x.niveau), 'attente') }}">{{ x.niveau }}</span></a></td>
+        <td><div class="barre-valeur"><i style="width:{{ (100 * (x.critiques or 0) / s.maxi.critiques) | round | int }}%"></i><span>{{ nb(x.critiques) }}{% if x.parc %}<small>/{{ x.parc }}</small>{% endif %}</span></div></td>
+        <td><div class="barre-valeur"><i style="width:{{ (100 * (x.vulns or 0) / s.maxi.vulns) | round | int }}%"></i><span>{{ nb(x.vulns) }}</span></div></td>
+      </tr>{% endfor %}</tbody></table></div>
+    {% else %}<p class="aide" style="margin:0">Aucun rapport validé pour {{ s.libelle | lower }}.</p>{% endif %}
+  </div>
+
+  {# ---------------- Alertes ---------------- #}
+  <div class="carte">
+    <div class="titre-carte"><h2>Alertes ouvertes</h2><a class="aide" href="/alertes">toutes les alertes →</a></div>
+    {% if s.alertes %}<ul class="liste-alertes">{% for a in s.alertes %}
+      <li class="{{ a.niveau }}"><a href="{{ a.lien or '/alertes' }}">{{ a.titre }}</a><span class="aide mono">{{ a.cree_le | fdate }}</span></li>{% endfor %}</ul>
+    {% else %}<p class="aide" style="margin:0">Aucune alerte ouverte.</p>{% endif %}
+  </div>
+</div>
+
+<div class="grille-2" style="margin-top:20px">
+  {# ---------------- Applications communes ---------------- #}
+  <div class="carte">
+    <div class="titre-carte"><h2>Applications vulnérables</h2><span class="aide">les plus répandues dans le portefeuille</span></div>
+    {% if s.communes %}<div class="tableau"><table class="liste">
+      <thead><tr><th>Application</th><th>Clients</th><th>Vuln.</th><th>Critiques</th></tr></thead>
+      <tbody>{% for a in s.communes %}<tr><td><strong>{{ a.nom }}</strong></td>
+        <td title="{{ a.clients | join(', ') }}"><span class="etiquette {{ 'alerte' if a.clients | length > 1 }}">{{ a.clients | length }}</span></td>
+        <td class="date">{{ a.total }}</td><td class="date">{{ a.critiques }}</td></tr>{% endfor %}</tbody></table></div>
+      <p class="aide" style="margin:10px 0 0">Une application présente chez plusieurs clients peut faire l'objet d'une campagne de mise à jour commune.</p>
+    {% else %}<p class="aide" style="margin:0">Aucune donnée de vulnérabilités ce mois-ci.</p>{% endif %}
+  </div>
+
+  {# ---------------- Menaces ---------------- #}
+  <div class="carte">
+    <div class="titre-carte"><h2>Menaces par catégorie</h2><span class="aide mono">{{ nb(s.total_categories) }} détections</span></div>
+    {% if s.categories %}<div class="barres">{% for cat, n in s.categories %}
+      <div class="barre-ligne"><span class="lib">{{ cat }}</span>
+        <div class="barre-valeur"><i style="width:{{ (100 * n / s.categories[0][1]) | round | int }}%"></i><span>{{ nb(n) }}</span></div></div>{% endfor %}</div>
+    {% else %}<p class="aide" style="margin:0">Aucune détection ce mois-ci.</p>{% endif %}
+  </div>
+</div>
+
+<div class="grille-2" style="margin-top:20px">
+  {# ---------------- Couverture MDR ---------------- #}
+  <div class="carte">
+    {% set total_hors = s.couverture | sum(attribute="hors") %}
+    <div class="titre-carte"><h2>Couverture MDR du parc</h2>
+      {% if total_hors %}<span class="etiquette alerte">{{ total_hors }} poste(s) hors MDR</span>{% endif %}</div>
+    {% if s.couverture %}<div class="tableau"><table class="liste couverture-mdr">
+      <thead><tr><th>Client</th><th>Couverture</th><th>Hors MDR</th></tr></thead>
+      <tbody>{% for x in s.couverture %}{% set taux = (100 * x.mdr / x.parc) | round | int if x.parc else 0 %}<tr>
+        <td class="client">{{ x.client.nom }}</td>
+        <td><div class="barre-valeur {{ 'faible' if taux < 80 }}"><i style="width:{{ [taux, 100] | min }}%"></i><span>{{ taux }} % <small>{{ x.mdr }}/{{ x.parc }}</small></span></div></td>
+        <td>{% if x.hors %}<strong class="hors-mdr">{{ x.hors }}</strong> <span class="aide">poste(s)</span>{% else %}<span class="aide">—</span>{% endif %}</td>
+      </tr>{% endfor %}</tbody></table></div>
+      <p class="aide" style="margin:10px 0 0">Postes administrés dans KSC qui n'envoient pas de télémétrie au MDR (maximum journalier du mois) :
+      ils échappent à la détection managée, et représentent une extension de service à proposer.</p>
+    {% else %}<p class="aide" style="margin:0">Aucun client MDR + KSC validé ce mois-ci.</p>{% endif %}
+  </div>
+
+  {# ---------------- Actions et délais ---------------- #}
+  <div class="carte">
+    <div class="titre-carte"><h2>Suivi des actions</h2><span class="aide">rapports de {{ s.libelle | lower }}</span></div>
+    <div class="mini-indicateurs">
+      <div><span class="valeur">{{ s.actions.taux if s.actions.taux is not none else "—" }}{{ " %" if s.actions.taux is not none }}</span><span class="aide">taux de réalisation des actions suivies</span></div>
+      <div><span class="valeur">{{ s.actions.ouvertes }}</span><span class="aide">actions ouvertes (dont {{ s.actions.nouvelles }} nouvelles)</span></div>
+      <div class="{{ 'a-surveiller' if s.actions.anciennes }}"><span class="valeur">{{ s.actions.anciennes | length }}</span><span class="aide">ouvertes depuis {{ s.anciennete_alerte }} mois ou plus</span></div>
+    </div>
+    {% if s.actions.par_responsable %}{% set total_ouv = s.actions.par_responsable.values() | sum %}
+    <div class="repartition" aria-label="Actions ouvertes par responsable">
+      {% for resp, n in s.actions.par_responsable.most_common() %}
+      <span class="part {{ 'esay' if resp not in ('Client', 'Partagée') else 'client' if resp == 'Client' else 'partagee' }}" style="flex:{{ n }}" title="{{ resp }} : {{ n }} action(s)"></span>{% endfor %}
+    </div>
+    <p class="aide legende-repartition">{% for resp, n in s.actions.par_responsable.most_common() %}<span><i class="{{ 'esay' if resp not in ('Client', 'Partagée') else 'client' if resp == 'Client' else 'partagee' }}"></i><strong>{{ resp }}</strong> {{ n }} ({{ (100 * n / total_ouv) | round | int }} %)</span>{% endfor %}</p>
+    {% endif %}
+  </div>
+</div>
+
+{# ---------------- Évolution des menaces ---------------- #}
+{% set me = s.menaces_evolution %}
+<div class="carte" style="margin-top:20px">
+  <div class="titre-carte"><h2>Évolution des menaces par catégorie</h2><span class="aide">détections par mois · une échelle par catégorie</span></div>
+  {% if me.mois_avec_donnees < 2 %}<p class="aide" style="margin:0">L'évolution apparaîtra à partir du deuxième mois validé.</p>
+  {% else %}
+  <div class="courbes">{% for c in courbes_menaces %}
+    <figure class="petite-courbe"><figcaption><span>{{ c.titre }}</span>
+      {% if c.variation %}<span class="variation">{{ "▲" if c.variation[0] > 0 else "▼" if c.variation[0] < 0 else "=" }} {{ c.variation[1] }}</span>{% endif %}</figcaption>{{ c.svg }}</figure>
+  {% endfor %}</div>
+  {% if me.autres %}<p class="aide" style="margin:10px 0 0">Autres catégories (non tracées) : {{ me.autres | join(", ") }}.</p>{% endif %}
+  <details class="table-donnees"><summary>Voir les valeurs</summary>
+    <div class="tableau"><table class="liste"><thead><tr><th>Mois</th>{% for serie in me.series %}<th>{{ serie.libelle }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for p in me.points %}<tr><td class="date">{{ p.libelle }}</td>{% for serie in me.series %}<td class="date">{{ p.indicateurs[serie.cle] if p.indicateurs[serie.cle] is not none else "—" }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>
+  </details>
+  {% endif %}
+</div>
+
+<div class="grille-2" style="margin-top:20px">
+  {# ---------------- Actions anciennes ---------------- #}
+  <div class="carte">
+    <div class="titre-carte"><h2>Actions ouvertes depuis {{ s.anciennete_alerte }} mois ou plus</h2><span class="aide">au rapport de {{ s.libelle | lower }}</span></div>
+    {% if s.actions.anciennes %}<div class="tableau"><table class="liste">
+      <thead><tr><th>Client</th><th>Action</th><th>Ouverte depuis</th></tr></thead>
+      <tbody>{% for a in s.actions.anciennes[:12] %}<tr>
+        <td class="nobr"><a class="client" href="/rapports/{{ a.rapport_id }}">{{ a.client.nom }}</a></td>
+        <td><strong>{{ a.action }}</strong><div class="aide">{{ a.priorite }} · {{ a.statut | lower }} · {{ a.responsable }}</div></td>
+        <td class="nobr"><span class="etiquette {{ 'erreur' if a.age >= 3 else 'alerte' }}">{{ a.age }} mois</span><div class="aide">{{ a.depuis | lower }}</div></td>
+      </tr>{% endfor %}</tbody></table></div>
+      {% if s.actions.anciennes | length > 12 %}<p class="aide" style="margin:8px 0 0">… et {{ s.actions.anciennes | length - 12 }} autre(s).</p>{% endif %}
+    {% else %}<p class="aide" style="margin:0">Aucune action ouverte depuis {{ s.anciennete_alerte }} mois ou plus.</p>{% endif %}
+  </div>
+
+  {# ---------------- Délais de production ---------------- #}
+  <div class="carte">
+    <div class="titre-carte"><h2>Délai de production</h2><span class="aide">engagement : validé sous {{ s.engagement }} jours</span></div>
+    <div class="tableau"><table class="liste">
+      <thead><tr><th>Client</th><th>Validé le</th><th>Délai</th></tr></thead>
+      <tbody>{% for x in s.delais_mois %}<tr>
+        <td class="client">{% if x.rapport_id %}<a href="/rapports/{{ x.rapport_id }}">{{ x.client.nom }}</a>{% else %}{{ x.client.nom }}{% endif %}</td>
+        <td class="date">{{ x.valide_le | fdate if x.valide_le else "non validé" }}</td>
+        <td>{% if x.jours is none %}<span class="aide">mois en cours</span>
+            {% else %}<span class="etiquette {{ 'erreur' if x.retard else 'ok' }}">{{ (("J+" if x.jours >= 0 else "J") ~ x.jours) if x.valide_le else (x.jours ~ " j écoulés") }}</span>{% endif %}</td>
+      </tr>{% else %}<tr><td colspan="3" class="vide">Aucun client.</td></tr>{% endfor %}</tbody></table></div>
+    <figure class="petite-courbe" style="margin-top:14px"><figcaption><span>Délai moyen par mois (jours après la fin du mois)</span></figcaption>{{ courbe_delais }}</figure>
+  </div>
+</div>
+{% endif %}
+
+<div class="grille-2" style="margin-top:20px">
+  {# ---------------- Fin de support ---------------- #}
+  <div class="carte">
+    <div class="titre-carte"><h2>Systèmes en fin de support</h2><span class="aide">dernier export de chaque client</span></div>
+    {% if s.fin_support %}<div class="tableau"><table class="liste">
+      <thead><tr><th>Système</th><th>Fin de support</th><th>Appareils</th><th>Clients</th></tr></thead>
+      <tbody>{% for o in s.fin_support %}<tr><td><strong>{{ o.os }}</strong></td>
+        <td><span class="pastille {{ 'erreur' if o.statut == 'expire' else 'alerte' if o.statut == 'urgent' else 'cours' }}">{{ o.libelle }}</span>
+          <div class="aide mono">{{ o.fin.strftime("%d/%m/%Y") }}</div></td>
+        <td class="date">{{ o.appareils }}{% if o.serveurs %} <span class="aide">dont {{ o.serveurs }} serv.</span>{% endif %}</td>
+        <td>{{ o.clients | join(", ") }}</td></tr>{% endfor %}</tbody></table></div>
+    {% else %}<p class="aide" style="margin:0">Aucun système en fin de support dans les 18 prochains mois.</p>{% endif %}
+  </div>
+
+  {# ---------------- Contrats ---------------- #}
+  <div class="carte">
+    <div class="titre-carte"><h2>Contrats à surveiller</h2><a class="aide" href="/contrats">tous les contrats →</a></div>
+    {% if s.contrats %}<ul class="liste-alertes">{% for k, e in s.contrats %}
+      <li class="{{ 'critique' if e.echeance[0] == 'expire' or e.statut == 'depassement' else 'avertissement' if e.echeance[0] == 'proche' else 'info' }}">
+        <a href="/contrats">{{ k.client.nom }} — {{ k.produit }} · {{ k.licences }} licences</a>
+        <span class="aide">{% if e.statut in ("depassement", "sous-utilise") %}{{ e.libelle }}{% endif %}{% if e.echeance[0] in ("expire", "proche", "a-prevoir") %}{{ " · " if e.statut in ("depassement", "sous-utilise") }}échéance {{ e.echeance[1] | lower }}{% endif %}</span></li>{% endfor %}</ul>
+    {% else %}<p class="aide" style="margin:0">Aucun contrat en dépassement ou proche de l'échéance.</p>{% endif %}
+  </div>
+</div>
+{% endblock %}

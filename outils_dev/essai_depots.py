@@ -81,14 +81,14 @@ def main():
             r = http.post(f"/exports/{faux_export.id}/supprimer", data={"csrf": csrf}, follow_redirects=True)
             verifier("supprimé" in r.text, "suppression du faux export")
 
-            r = http.get("/?annee=2026&mois=9")
+            r = http.get("/production?annee=2026&mois=9")
             verifier("27/30 jours" in r.text and "Partiel" in r.text, "tableau de bord : couverture MDR et état")
             r = http.get(base + "/apercu")
             texte = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", r.text))
             verifier("Critique" in texte and re.search(r"Menaces détections 462 ", texte)
                      and re.search(r"Vulnérabilités critiques 71 / 199 ", texte),
                      "aperçu : risque et chiffres de HUDSON")
-            anare = http.get("/?annee=2026&mois=9").text
+            anare = http.get("/production?annee=2026&mois=9").text
             verifier(anare.count("Aucune donnée") == 0, "ANARE retrouvé via le tenant racine")
     finally:
         with Session() as db:

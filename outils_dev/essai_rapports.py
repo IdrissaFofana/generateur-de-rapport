@@ -6,11 +6,11 @@ Supprime ses comptes et ses rapports à la fin (les fichiers déposés sont cons
 import re
 
 from fastapi.testclient import TestClient
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
 from app.db import Session
 from app.main import app
-from app.modeles import Client, Journal, Rapport, Utilisateur
+from app.modeles import Alerte, Client, Journal, Rapport, Utilisateur
 from app.securite import hacher
 from app.stockage import supprimer
 
@@ -58,6 +58,7 @@ def main():
             db.add(Utilisateur(email=f"{PREFIXE}.{role}@esay.local", nom=f"Essai {role}", role=role,
                                mot_de_passe=hacher(MDP), doit_changer_mdp=False))
         db.commit()
+        alerte_max = db.scalar(select(func.max(Alerte.id))) or 0
         hudson = db.scalar(select(Client).where(Client.nom == "HUDSON"))
     base = f"/clients/{hudson.id}/2026/9"
     try:
@@ -141,6 +142,7 @@ def main():
                     supprimer(r.pdf)
                 db.delete(r)
             ids = db.scalars(select(Utilisateur.id).where(Utilisateur.email.like(f"{PREFIXE}%"))).all()
+            db.execute(delete(Alerte).where(Alerte.id > alerte_max))
             db.execute(delete(Journal).where(Journal.utilisateur_id.in_(ids)))
             db.execute(delete(Utilisateur).where(Utilisateur.id.in_(ids)))
             db.commit()

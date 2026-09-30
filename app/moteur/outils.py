@@ -92,3 +92,17 @@ def bornes_mois(annee, mois):
     debut = date(annee, mois, 1)
     fin = date(annee + (mois == 12), mois % 12 + 1, 1)
     return debut, fin  # fin exclue
+
+
+def mois_courant(aujourd_hui=None):
+    """Mois traité par défaut : le mois en cours à partir du 25, sinon le précédent."""
+    auj = aujourd_hui or date.today()
+    if auj.day >= 25:
+        return auj.year, auj.month
+    return (auj.year - 1, 12) if auj.month == 1 else (auj.year, auj.month - 1)
+
+
+def mois_decale(annee, mois, delta):
+    """(annee, mois) décalé de delta mois (négatif = vers le passé)."""
+    rang = annee * 12 + mois - 1 + delta
+    return rang // 12, rang % 12 + 1

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block titre %}Contrats et licences{% endblock %}
+{% block contenu %}
+<div class="en-tete">
+  <div><div class="surtitre">Pilotage commercial</div><h1>Contrats et licences</h1>
+  <p class="sous-titre">Licences souscrites comparées à l'usage réel : appareils administrés (dernier export KSC) et postes supervisés
+  (maximum journalier MDR du mois). Sous {{ seuil }} % d'utilisation, un contrat est signalé comme sous-utilisé.</p></div>
+</div>
+
+{% set depassements = lignes | selectattr("1.statut", "equalto", "depassement") | list %}
+{% set sous = lignes | selectattr("1.statut", "equalto", "sous-utilise") | list %}
+{% set echeances = lignes | selectattr("1.echeance.0", "in", ["expire", "proche", "a-prevoir"]) | list %}
+<div class="indicateurs">
+  <div class="indicateur marine"><div class="valeur">{{ lignes | length }}</div><div class="libelle">Contrats actifs</div></div>
+  <div class="indicateur critique"><div class="valeur">{{ depassements | length }}</div><div class="libelle">En dépassement</div></div>
+  <div class="indicateur alerte"><div class="valeur">{{ sous | length }}</div><div class="libelle">Sous-utilisés</div></div>
+  <div class="indicateur cours"><div class="valeur">{{ echeances | length }}</div><div class="libelle">Échéance sous 90 jours ou expirés</div></div>
+</div>
+
+<div class="tableau">
+<table class="liste">
+<thead><tr><th>Client</th><th>Produit</th><th>Licences</th><th>Utilisé</th><th>Taux</th><th>Usage</th><th>Échéance</th><th></th></tr></thead>
+<tbody>
+{% for k, e in lignes %}
+<tr>
+  <td><div class="client">{{ k.client.nom }}</div>{% if k.reference %}<span class="aide mono nobr">{{ k.reference }}</span>{% endif %}</td>
+  <td><span class="pastille profil">{{ k.produit }}</span></td>
+  <td class="date">{{ k.licences }}</td>
+  <td class="date">{{ e.utilise if e.utilise is not none else "—" }}</td>
+  <td>{% if e.taux is not none %}<div class="barre-valeur {{ 'faible' if e.statut != 'ok' }}"><i style="width:{{ [e.taux, 100] | min }}%"></i><span>{{ e.taux }} %</span></div>{% else %}—{% endif %}</td>
+  <td><span class="pastille {{ {'depassement': 'erreur', 'sous-utilise': 'alerte', 'ok': 'ok'}.get(e.statut, 'attente') }}">{{ e.libelle }}</span></td>
+  <td class="nobr">{% if k.echeance %}<span class="mono">{{ k.echeance.strftime("%d/%m/%Y") }}</span>
+      <div><span class="etiquette {{ {'expire': 'erreur', 'proche': 'alerte', 'a-prevoir': 'cours'}.get(e.echeance[0], '') }}">{{ e.echeance[1] }}</span></div>{% else %}<span class="aide">—</span>{% endif %}</td>
+  <td class="fin">{% if utilisateur.peut("admin") %}<a class="bouton petit secondaire" href="/admin/clients/{{ k.client_id }}#contrats">Modifier</a>{% endif %}</td>
+</tr>
+{% else %}
+<tr><td colspan="8" class="vide">Aucun contrat enregistré.{% if utilisateur.peut("admin") %} Les contrats se saisissent dans la fiche de chaque client (Administration → Clients).{% endif %}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+
+{% if sans_contrat %}
+<p class="aide" style="margin-top:14px">Clients actifs sans contrat enregistré :
+{% for c in sans_contrat %}{% if utilisateur.peut("admin") %}<a href="/admin/clients/{{ c.id }}#contrats">{{ c.nom }}</a>{% else %}{{ c.nom }}{% endif %}{{ ", " if not loop.last }}{% endfor %}.</p>
+{% endif %}
+{% endblock %}

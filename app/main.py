@@ -3,7 +3,9 @@
 Lancement (développement) :  python -m app.main
 Production : uvicorn app.main:app --host 127.0.0.1 --port $PORT  (derrière Nginx)
 """
+import logging
 import os
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
@@ -13,17 +15,27 @@ from starlette.middleware.sessions import SessionMiddleware
 from .analyses import arreter as arreter_analyses
 from .analyses import reprendre_analyses
 from .config import COOKIE_SECURISE, PORT, SECRET_KEY, STOCKAGE_DIR
-from .db import creer_tables
+from . import alertes
+from .db import Session, migrer
 from .securite import NonConnecte
-from .web import admin, auth, depots, rapports, tableau
+from .web import admin, auth, bilans, depots, interventions, pilotage, rapports, tableau
 from .web.commun import page, rediriger
+
+
+def _alertes_au_demarrage():
+    try:
+        with Session() as db:
+            alertes.evaluer_et_notifier(db, en_arriere_plan=False)
+    except Exception:  # noqa: BLE001  (base indisponible, etc. : réessayé par la tâche quotidienne)
+        logging.getLogger("rapports.alertes").exception("Évaluation des alertes au démarrage")
 
 
 @asynccontextmanager
 async def cycle_de_vie(_app):
     os.makedirs(STOCKAGE_DIR, exist_ok=True)
-    creer_tables()
+    migrer()
     reprendre_analyses()
+    threading.Thread(target=_alertes_au_demarrage, daemon=True).start()
     yield
     arreter_analyses()
 
@@ -34,7 +46,7 @@ app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY, session_cookie="rap
                    max_age=12 * 3600, same_site="lax", https_only=COOKIE_SECURISE)
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
 
-for module in (auth, tableau, depots, rapports, admin):
+for module in (auth, pilotage, tableau, depots, rapports, bilans, interventions, admin):
     app.include_router(module.routes)
 
 

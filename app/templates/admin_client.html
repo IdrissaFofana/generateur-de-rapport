@@ -32,13 +32,59 @@
       <span>Proposer le service MDR dans le rapport quand la situation le justifie <span class="aide">(clients sans MDR uniquement)</span></span></label>
   </div>
 
-  <div class="champ" style="margin-top:18px"><label>Notes internes</label><textarea name="notes" rows="2">{{ client.notes if client else '' }}</textarea></div>
+  <div class="grille" style="margin-top:18px;grid-template-columns: 180px minmax(0, 1fr)">
+    <div class="champ"><label for="code">Code client <span class="aide">— numéros RI</span></label>
+      <input type="text" id="code" name="code" maxlength="10" value="{{ client.code or '' if client else '' }}"
+             placeholder="{{ client.code_rapport if client and client.nom else 'HUD' }}" style="font-family:var(--mono);text-transform:uppercase"></div>
+    <div class="champ"><label for="emails">Destinataires des rapports <span class="aide">— adresses séparées par des virgules</span></label>
+      <input type="text" id="emails" name="emails_rapports" value="{{ (client.emails_rapports or []) | join(', ') if client else '' }}" placeholder="dsi@client.ci, securite@client.ci"></div>
+  </div>
+  <div class="champ"><label>Notes internes</label><textarea name="notes" rows="2">{{ client.notes if client else '' }}</textarea></div>
   {% if client and client.id %}
   <label class="case"><input type="checkbox" name="actif" value="true" {{ 'checked' if client.actif }}>
     <span><strong>Client actif</strong><br><span class="aide">Décocher pour l'archiver : il n'apparaît plus au tableau de bord, son historique est conservé.</span></span></label>
   {% else %}<input type="hidden" name="actif" value="true">{% endif %}
   <div class="actions-bas" style="margin-top:20px"><button class="bouton" type="submit">Enregistrer</button><a class="bouton secondaire" href="/admin/clients">Annuler</a></div>
 </form>
+
+{% if client and client.id and contrats is defined %}
+{% macro champs_contrat(k) %}
+  <div><label>Produit</label><select name="produit">{% for cle, lib in PRODUITS.items() %}<option value="{{ cle }}" {{ 'selected' if k and k.produit == cle }}>{{ cle }}</option>{% endfor %}</select></div>
+  <div><label>Licences</label><input type="number" name="licences" min="0" value="{{ k.licences if k else '' }}" required></div>
+  <div><label>Référence</label><input type="text" name="reference" value="{{ k.reference if k else '' }}" placeholder="n° de contrat, commande…"></div>
+  <div><label>Début</label><input type="date" name="debut" value="{{ k.debut.isoformat() if k and k.debut else '' }}"></div>
+  <div><label>Échéance</label><input type="date" name="echeance" value="{{ k.echeance.isoformat() if k and k.echeance else '' }}"></div>
+{% endmacro %}
+<div class="carte" id="contrats" style="max-width:980px">
+  <div class="titre-carte"><h2>Contrats et licences</h2><a class="aide" href="/contrats">vue de tous les contrats →</a></div>
+  <p class="aide" style="margin-top:-6px">KSC : comparé au nombre d'appareils administrés (dernier export). MDR : comparé au maximum
+  journalier de postes supervisés du mois traité. Une échéance à moins de 90 jours déclenche une alerte.</p>
+  {% for k, e in contrats %}
+  <form method="post" action="/admin/contrats/{{ k.id }}" class="contrat {{ '' if k.actif else 'inactif' }}">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="grille-contrat">{{ champs_contrat(k) }}</div>
+    <div class="en-ligne" style="justify-content:space-between;margin-top:10px">
+      <span class="en-ligne">
+        <span class="pastille {{ {'depassement': 'erreur', 'sous-utilise': 'alerte', 'ok': 'ok'}.get(e.statut, 'attente') }}">{{ e.libelle }}{% if e.utilise is not none %} ({{ e.utilise }}/{{ k.licences }}){% endif %}</span>
+        {% if k.echeance %}<span class="etiquette {{ {'expire': 'erreur', 'proche': 'alerte', 'a-prevoir': 'cours'}.get(e.echeance[0], '') }}">échéance : {{ e.echeance[1] | lower }}</span>{% endif %}
+        <label class="case simple aide"><input type="checkbox" name="actif" value="true" {{ 'checked' if k.actif }}> actif</label>
+      </span>
+      <span class="en-ligne">
+        <button class="bouton petit" type="submit">Enregistrer</button>
+        <button class="bouton petit danger" type="submit" formaction="/admin/contrats/{{ k.id }}/supprimer"
+                onclick="return confirm('Supprimer ce contrat ?')">Supprimer</button>
+      </span>
+    </div>
+  </form>
+  {% endfor %}
+  <form method="post" action="/admin/clients/{{ client.id }}/contrats" class="contrat nouveau">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <div class="intitule-nouveau">Nouveau contrat</div>
+    <div class="grille-contrat">{{ champs_contrat(none) }}</div>
+    <div style="margin-top:10px"><button class="bouton petit" type="submit">+ Ajouter le contrat</button></div>
+  </form>
+</div>
+{% endif %}
 <script>
 function ajouterTenant(t) {
   const zone = document.getElementById("tenants_mdr");

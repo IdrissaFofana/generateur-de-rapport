@@ -1,0 +1,15 @@
+<div class="point-bloquant">
+  <div class="grille-point">
+    <div><label>Blocage / problème</label><input type="text" name="pb_probleme" value="{{ p.probleme }}" placeholder="ex. Ports 135, 139 et 445 fermés"></div>
+    <div><label>Impact / conséquence</label><input type="text" name="pb_impact" value="{{ p.impact }}" placeholder="ex. Installation à distance impossible"></div>
+    <div><label>Action corrective</label><input type="text" name="pb_action" value="{{ p.action }}" placeholder="ex. Ouvrir les ports sur le pare-feu"></div>
+    <div><label>Responsable</label><input type="text" name="pb_responsable" value="{{ p.responsable }}" placeholder="ESAY, client…"></div>
+    <div><label>Échéance</label><input type="date" name="pb_echeance" value="{{ p.echeance or '' }}"></div>
+  </div>
+  <div class="en-ligne" style="justify-content:space-between;margin-top:8px">
+    <label class="case simple aide" title="L'action sera ajoutée au plan d'action du rapport mensuel du mois de l'intervention">
+      <input type="checkbox" onchange="basculer(this)" {{ 'checked' if p.plan_action }}><input type="hidden" name="pb_plan" value="{{ '1' if p.plan_action else '0' }}">
+      Reprendre dans le plan d'action du rapport mensuel</label>
+    <button type="button" class="bouton petit danger" onclick="retirer(this)">Retirer</button>
+  </div>
+</div>

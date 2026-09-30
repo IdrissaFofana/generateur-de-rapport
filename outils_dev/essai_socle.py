@@ -48,8 +48,9 @@ def main():
 
             r = connecter(http, f"{PREFIXE}.admin@esay.local")
             verifier(r.headers["location"] == "/", "connexion administrateur")
-            r = http.get("/")
-            verifier("HUDSON" in r.text and "Tableau de bord" in r.text, "tableau de bord avec les clients")
+            verifier(http.get("/").status_code == 200, "vue d'ensemble accessible")
+            r = http.get("/production")
+            verifier("HUDSON" in r.text and "Production mensuelle" in r.text, "page Production avec les clients")
             r = http.get("/admin/clients")
             verifier("root tenant" in r.text, "liste des clients avec tenants")
 
@@ -68,7 +69,7 @@ def main():
 
         with TestClient(app) as http:
             connecter(http, f"{PREFIXE}.operateur@esay.local")
-            verifier(http.get("/").status_code == 200, "opérateur : accès au tableau de bord")
+            verifier(http.get("/production").status_code == 200, "opérateur : accès à la production")
             verifier(http.get("/admin/clients").status_code == 403, "opérateur : administration interdite")
 
         with TestClient(app) as http:

@@ -20,8 +20,8 @@ from app.db import Base, moteur
 from app import modeles  # noqa: F401  (enregistre les modèles)
 
 # Ordre d'insertion respectant les clés étrangères
-TABLES = ["utilisateurs", "clients", "hebdos", "exports_ksc", "rapports", "journal"]
-CHEMINS = {"hebdos": ["chemin"], "exports_ksc": ["chemin"], "rapports": ["pdf"]}
+TABLES = ["utilisateurs", "clients", "hebdos", "exports_ksc", "rapports", "journal", "contrats", "alertes", "envois", "bibliotheque", "interventions"]
+CHEMINS = {"hebdos": ["chemin"], "exports_ksc": ["chemin"], "rapports": ["pdf"], "interventions": ["pdf"]}
 
 
 def litteral(valeur, jsonb=False):

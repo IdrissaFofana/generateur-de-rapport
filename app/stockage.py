@@ -38,7 +38,7 @@ def enregistrer(contenu, *sous_dossiers):
     if not os.path.exists(chemin):
         with open(chemin, "wb") as f:
             f.write(contenu)
-    return os.path.relpath(chemin, STOCKAGE_DIR), h
+    return os.path.relpath(chemin, STOCKAGE_DIR).replace(os.sep, "/"), h  # « / » quel que soit le système
 
 
 def absolu(chemin_relatif):

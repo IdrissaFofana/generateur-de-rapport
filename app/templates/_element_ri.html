@@ -1,0 +1,11 @@
+<div class="element-ri">
+  <input type="text" name="{{ nom }}" value="{{ valeur }}" aria-label="{{ 'Action' if nom == 'resultat' else 'Recommandation' }}">
+  {# Un seul indicateur par ligne (aligné avec le texte) ; la case n'est proposée que pour un texte saisi à la main #}
+  <label class="biblio-case aide" title="Enregistrer ce texte dans la bibliothèque pour ce type d'intervention"{% if not perso %} hidden{% endif %}>
+    <input type="checkbox" onchange="basculer(this)"><input type="hidden" name="{{ nom }}_biblio" value="0"> bibliothèque</label>
+  <span class="outils-element">
+    <button type="button" class="bouton petit fantome" title="Monter" aria-label="Monter" onclick="deplacer(this, -1)">↑</button>
+    <button type="button" class="bouton petit fantome" title="Descendre" aria-label="Descendre" onclick="deplacer(this, 1)">↓</button>
+    <button type="button" class="bouton petit danger" title="Retirer" aria-label="Retirer" onclick="retirer(this)">✕</button>
+  </span>
+</div>

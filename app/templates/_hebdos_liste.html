@@ -8,7 +8,8 @@
 {% for c, cov in couvertures %}
 <tr><td class="client">{{ c.nom }}</td><td>{% for t in c.tenants_mdr %}<code>{{ t }}</code> {% endfor %}</td>
 <td>{{ couverture(cov) }}</td>
-<td class="date">{% if cov.manquants %}{{ cov.manquants[0] | fdate }} → {{ cov.manquants[-1] | fdate }}{% else %}—{% endif %}</td></tr>
+<td class="date">{% if cov.manquants %}{{ cov.manquants[0] | fdate }} → {{ cov.manquants[-1] | fdate }}
+  {% elif cov.a_venir %}<span class="aide">à venir : {{ cov.a_venir[0] | fdate }} → {{ cov.a_venir[-1] | fdate }}</span>{% else %}—{% endif %}</td></tr>
 {% else %}<tr><td colspan="4" class="vide">Aucun client MDR actif.</td></tr>{% endfor %}
 </tbody>
 </table>

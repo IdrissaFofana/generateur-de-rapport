@@ -14,9 +14,13 @@
 {% if mdr is none %}<span class="aide">non souscrit</span>
 {% elif not mdr.tenant_trouve %}<span class="pastille erreur" title="Aucune donnée pour ce tenant dans les hebdos déposés">Aucune donnée</span>
 {% else %}
-<span class="couverture {{ 'alerte' if mdr.manquants }}" title="{{ 'Jours manquants : ajouter l\'hebdo suivant' if mdr.manquants else 'Mois entièrement couvert' }}">
+{% if mdr.manquants %}{% set titre = "Jours manquants : ajouter l'hebdo correspondant" %}
+{% elif mdr.a_venir %}{% set titre = (mdr.a_venir | length) ~ " jour(s) à venir : l'hebdo de la semaine en cours n'est pas encore paru" %}
+{% else %}{% set titre = "Mois entièrement couvert" %}{% endif %}
+<span class="couverture {{ 'alerte' if mdr.manquants else 'cours' if mdr.a_venir }}" title="{{ titre }}">
   <span class="barre-j"><i style="width:{{ (100 * mdr.jours / mdr.total) | round | int if mdr.total else 0 }}%"></i></span>
   <span class="n">{{ mdr.jours }}/{{ mdr.total }} jours</span>
+  {% if mdr.a_venir and not mdr.manquants %}<span class="a-venir">+{{ mdr.a_venir | length }} à venir</span>{% endif %}
 </span>
 {% endif %}
 {% endmacro %}

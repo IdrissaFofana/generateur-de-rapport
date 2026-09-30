@@ -1,13 +1,19 @@
 """Administration : utilisateurs, clients, journal."""
+import csv
+import io
 import re
 import secrets
+from datetime import date, timedelta
+from urllib.parse import urlencode
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
+from fastapi.responses import Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as SessionDB
 
 from ..db import session_db
-from ..modeles import ROLES, Client, Hebdo, Journal, Utilisateur, journaliser
+from .. import config, parc
+from ..modeles import PRODUITS, ROLES, Client, Contrat, Hebdo, Journal, Utilisateur, journaliser
 from ..securite import exiger, hacher, verifier_csrf
 from .commun import flash, page, rediriger
 
@@ -113,7 +119,9 @@ def fiche_client(request: Request, cid: int, u=Depends(admin), db: SessionDB = D
     client = db.get(Client, cid)
     if client is None:
         raise HTTPException(404)
-    return page(request, "admin_client.html", u, client=client, tenants=tenants_connus(db))
+    contrats = [(k, parc.etat_contrat(k, parc.usage_client(db, client), config.SEUIL_SOUS_UTILISATION))
+                for k in db.scalars(select(Contrat).where(Contrat.client_id == cid).order_by(Contrat.actif.desc(), Contrat.echeance))]
+    return page(request, "admin_client.html", u, client=client, tenants=tenants_connus(db), contrats=contrats, PRODUITS=PRODUITS)
 
 
 @routes.post("/clients", dependencies=[Depends(verifier_csrf)])
@@ -121,17 +129,22 @@ def fiche_client(request: Request, cid: int, u=Depends(admin), db: SessionDB = D
 def enregistrer_client(request: Request, cid: int | None = None, nom: str = Form(...),
                        avec_mdr: bool = Form(False), avec_ksc: bool = Form(False), suggerer_mdr: bool = Form(False),
                        tenants_mdr: str = Form(""), notes: str = Form(""), actif: bool = Form(False),
+                       code: str = Form(""), emails_rapports: str = Form(""),
                        u=Depends(admin), db: SessionDB = Depends(session_db)):
     client = db.get(Client, cid) if cid else Client()
     if cid and client is None:
         raise HTTPException(404)
     nom = nom.strip()
     tenants = [t.strip() for t in re.split(r"[\n,;]", tenants_mdr) if t.strip()]
+    code = re.sub(r"[^A-Za-z0-9]", "", code).upper()[:10] or None
+    emails = [e.strip() for e in re.split(r"[\n,;\s]", emails_rapports) if e.strip()]
     erreur = None
     if not nom:
         erreur = "Le nom du client est obligatoire."
     elif not (avec_mdr or avec_ksc):
         erreur = "Le client doit avoir au moins un service : MDR ou KSC."
+    elif any("@" not in e for e in emails):
+        erreur = "Adresse e-mail invalide dans les destinataires des rapports."
     elif avec_mdr and not tenants:
         erreur = "Indiquez au moins un tenant MDR (tel qu'il apparaît dans les rapports hebdomadaires)."
     else:
@@ -140,13 +153,14 @@ def enregistrer_client(request: Request, cid: int | None = None, nom: str = Form
             erreur = f"Un client « {doublon.nom} » existe déjà."
     if erreur:
         brouillon = Client(id=cid, nom=nom, avec_mdr=avec_mdr, avec_ksc=avec_ksc, suggerer_mdr=suggerer_mdr,
-                           tenants_mdr=tenants, notes=notes, actif=actif)
+                           tenants_mdr=tenants, notes=notes, actif=actif, code=code, emails_rapports=emails)
         return page(request, "admin_client.html", u, client=brouillon, tenants=tenants_connus(db), erreur=erreur)
 
     client.nom, client.avec_mdr, client.avec_ksc = nom, avec_mdr, avec_ksc
     client.suggerer_mdr = suggerer_mdr and not avec_mdr
     client.tenants_mdr = tenants if avec_mdr else []
     client.notes, client.actif = notes.strip(), actif if cid else True
+    client.code, client.emails_rapports = code, emails
     if not cid:
         db.add(client)
     journaliser(db, u, "modification client" if cid else "création client", f"{nom} ({client.profil})")
@@ -158,7 +172,61 @@ def enregistrer_client(request: Request, cid: int | None = None, nom: str = Form
 # --------------------------------------------------------------------------- #
 # Journal
 # --------------------------------------------------------------------------- #
+PAR_PAGE = 50
+
+
+def _date(texte):
+    try:
+        return date.fromisoformat(texte) if texte else None
+    except ValueError:
+        return None
+
+
+def _filtres(request: Request):
+    q = request.query_params
+    uid = q.get("utilisateur", "")
+    return {"utilisateur": int(uid) if uid.isdigit() else None, "action": q.get("action", "").strip(),
+            "du": _date(q.get("du")), "au": _date(q.get("au")), "texte": q.get("texte", "").strip()}
+
+
+def _requete(f):
+    requete = select(Journal)
+    if f["utilisateur"]:
+        requete = requete.where(Journal.utilisateur_id == f["utilisateur"])
+    if f["action"]:
+        requete = requete.where(Journal.action == f["action"])
+    if f["du"]:
+        requete = requete.where(Journal.quand >= f["du"])
+    if f["au"]:
+        requete = requete.where(Journal.quand < f["au"] + timedelta(days=1))  # jour inclus
+    if f["texte"]:
+        requete = requete.where(Journal.detail.ilike(f"%{f['texte']}%"))
+    return requete
+
+
 @routes.get("/journal")
-def journal(request: Request, u=Depends(admin), db: SessionDB = Depends(session_db)):
-    lignes = db.scalars(select(Journal).order_by(Journal.quand.desc()).limit(300)).all()
-    return page(request, "admin_journal.html", u, lignes=lignes)
+def journal(request: Request, page_: int = Query(1, alias="page"), u=Depends(admin), db: SessionDB = Depends(session_db)):
+    f = _filtres(request)
+    requete = _requete(f)
+    total = db.scalar(select(func.count()).select_from(requete.subquery()))
+    pages = max(1, -(-total // PAR_PAGE))
+    page_ = min(max(1, page_), pages)
+    lignes = db.scalars(requete.order_by(Journal.quand.desc(), Journal.id.desc())
+                        .offset((page_ - 1) * PAR_PAGE).limit(PAR_PAGE)).all()
+    params = {k: (v.isoformat() if isinstance(v, date) else v) for k, v in f.items() if v}
+    return page(request, "admin_journal.html", u, lignes=lignes, f=f, total=total, page_=page_, pages=pages,
+                params=urlencode(params), utilisateurs=db.scalars(select(Utilisateur).order_by(Utilisateur.nom)).all(),
+                actions=db.scalars(select(Journal.action).distinct().order_by(Journal.action)).all())
+
+
+@routes.get("/journal.csv")
+def journal_csv(request: Request, u=Depends(admin), db: SessionDB = Depends(session_db)):
+    """Export des lignes filtrées (toutes les pages), séparateur « ; » pour Excel."""
+    sortie = io.StringIO()
+    ecrivain = csv.writer(sortie, delimiter=";")
+    ecrivain.writerow(["Date", "Utilisateur", "E-mail", "Action", "Détail"])
+    for l in db.scalars(_requete(_filtres(request)).order_by(Journal.quand.desc(), Journal.id.desc())):
+        ecrivain.writerow([l.quand.strftime("%d/%m/%Y %H:%M:%S"), l.utilisateur.nom if l.utilisateur else "",
+                           l.utilisateur.email if l.utilisateur else "", l.action, l.detail])
+    return Response("\ufeff" + sortie.getvalue(), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="journal-{date.today():%Y-%m-%d}.csv"'})

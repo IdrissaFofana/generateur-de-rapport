@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Bilan {{ d.periodicite }} de sécurité — {{ d.client }} — {{ d.libelle }}</title>
+<style>
+{{ css | safe }}
+@page { @bottom-center { content: "Confidentiel — {{ presta.nom }} / {{ presta.signataire }}     ·     Page " counter(page) " / " counter(pages); } }
+table.mois-par-mois td, table.mois-par-mois th { text-align: center; }
+table.mois-par-mois td:first-child, table.mois-par-mois th:first-child { text-align: left; }
+</style>
+</head>
+<body>
+{% set t = d.totaux %}
+{% set niveau = c.niveau_risque %}
+{% set presents = d.mois | selectattr("present") | list %}
+
+{% macro h1(ident) %}<h1 id="{{ ident }}">{{ numeros[ident] }} {{ titres[ident] }}</h1>{% endmacro %}
+{% macro encadre(titre, classe="k-info") %}
+<div class="encadre {{ classe }}">{% if titre %}<div class="titre">{{ titre | md_ligne }}</div>{% endif %}{{ caller() }}</div>
+{% endmacro %}
+{% macro valeur(v) %}{{ "—" if v is none else (v | virgule if v is float and v % 1 else v | int | nb) }}{% endmacro %}
+
+<div class="entete">
+  <img src="logo.png" alt="{{ presta.nom }}">
+  <div class="droite">Bilan {{ d.periodicite }} de sécurité — {{ d.client }}<br>{{ d.libelle_long | capitalize }}</div>
+</div>
+
+{# ===================================================== Page de garde #}
+<section class="couverture">
+  <img class="logo" src="logo.png" alt="{{ presta.nom }}">
+  <div class="bande">
+    <div class="t1">BILAN {{ d.periodicite | upper }}</div>
+    <div class="t2">DE SÉCURITÉ</div>
+    <div class="t3">{{ d.client }} &nbsp;·&nbsp; {{ d.libelle }}</div>
+  </div>
+  <table class="infos">
+    <tr><td>Client</td><td>{{ d.client }}</td></tr>
+    <tr><td>Prestataire</td><td>{{ presta.nom_complet }}</td></tr>
+    <tr><td>Période couverte</td><td>Du {{ d.debut | fdate }} au {{ d.fin_incluse | fdate }} ({{ d.libelle_long }})</td></tr>
+    <tr><td>Date du rapport</td><td>{{ date_rapport | fdate }}</td></tr>
+    <tr><td>Rédacteur</td><td>{{ presta.signataire }}</td></tr>
+    <tr><td>Sources</td><td>{{ t.mois_couverts }} rapport(s) mensuel(s) validé(s) sur {{ t.mois_attendus }}</td></tr>
+  </table>
+  <div class="risque-garde k-{{ niveau | slug }}">
+    <div class="libelle">Niveau de risque en fin de période</div>
+    <div class="niveau">{{ niveau | upper }}</div>
+    {% if d.manquants %}<div class="note">bilan partiel — {{ d.manquants | length }} mois sans rapport validé</div>{% endif %}
+  </div>
+  <p class="confidentiel">Document confidentiel, destiné exclusivement au client mentionné ci-dessus.</p>
+</section>
+
+{# ===================================================== Sommaire #}
+<section class="sommaire">
+  <div class="titre-sommaire">Sommaire</div>
+  <ul>{% for e in sommaire %}<li class="n{{ e.niveau }}"><a href="#{{ e.id }}">{{ e.titre }}</a></li>{% endfor %}</ul>
+</section>
+
+{# ===================================================== Synthèse #}
+{{ h1("synthese") }}
+{{ c.synthese | md }}
+
+{% call encadre("Niveau de risque en fin de période : " ~ niveau | upper, "k-" ~ (niveau | slug)) %}
+{% if c.motifs_risque %}<ul>{% for motif in c.motifs_risque %}<li>{{ motif | md_ligne }}</li>{% endfor %}</ul>
+{% else %}<p>Aucun point bloquant relevé en fin de période.</p>{% endif %}
+{% if d.niveau_max and d.niveau_max != niveau %}<p>Niveau le plus élevé atteint sur la période : {{ d.niveau_max | lower }}.</p>{% endif %}
+{% endcall %}
+
+<div class="tuiles">
+  {% if d.avec_mdr %}<div class="tuile"><div class="valeur">{{ valeur(t.postes_mdr_moyenne) }}</div><div class="libelle">postes supervisés en moyenne (MDR)</div></div>
+  <div class="tuile k-{{ 'critique' if t.incidents_mdr else 'bon' }}"><div class="valeur">{{ t.incidents_mdr }}</div><div class="libelle">incidents MDR</div></div>{% endif %}
+  {% if t.detections is not none %}<div class="tuile"><div class="valeur">{{ t.detections | nb }}</div><div class="libelle">menaces détectées</div></div>{% endif %}
+  {% if t.vulnerabilites_critiques_fin is not none %}<div class="tuile k-{{ 'critique' if t.vulnerabilites_critiques_fin else 'bon' }}"><div class="valeur">{{ t.vulnerabilites_critiques_fin }}</div><div class="libelle">vulnérabilités critiques en fin de période</div></div>{% endif %}
+  {% if t.actions %}<div class="tuile"><div class="valeur">{{ t.actions_realisees }}/{{ t.actions }}</div><div class="libelle">actions réalisées</div></div>{% endif %}
+</div>
+
+<table class="donnees mois-par-mois">
+<thead><tr><th>Indicateur</th>{% for m in d.mois %}<th>{{ m.court }}</th>{% endfor %}</tr></thead>
+<tbody>
+<tr><td>Niveau de risque</td>{% for m in d.mois %}<td>{{ (m.niveau or "—") | statut if m.present else "—" }}</td>{% endfor %}</tr>
+{% for cle, libelle in [("postes_mdr_moyenne", "Postes supervisés MDR (moyenne)"), ("incidents_mdr", "Incidents MDR"),
+                        ("appareils_administres", "Appareils administrés"), ("appareils_critiques", "Appareils en état critique"),
+                        ("detections", "Menaces détectées"), ("appareils_touches", "Appareils exposés"),
+                        ("vulnerabilites", "Vulnérabilités"), ("vulnerabilites_critiques", "dont critiques")] %}
+{% if presents | map(attribute="indicateurs") | map(attribute=cle) | reject("none") | list %}
+<tr><td>{{ libelle }}</td>{% for m in d.mois %}<td>{{ valeur(m.indicateurs.get(cle)) if m.present else "—" }}</td>{% endfor %}</tr>
+{% endif %}
+{% endfor %}
+</tbody>
+</table>
+{% if d.manquants %}<p class="note">Mois sans rapport validé : {{ d.manquants | join(", ") }}.</p>{% endif %}
+
+{# ===================================================== Évolution #}
+{{ h1("evolution") }}
+{{ c.commentaire_evolution | md }}
+{% if graphique_evolution %}
+<figure>{{ graphique_evolution | safe }}<figcaption>Évolution mensuelle des indicateurs clés sur la période</figcaption></figure>
+{% else %}
+<p class="note">Au moins deux mois validés sont nécessaires pour tracer l'évolution.</p>
+{% endif %}
+
+{# ===================================================== MDR #}
+{% if d.avec_mdr %}
+{{ h1("mdr") }}
+<p>Sur la période, le service Kaspersky MDR a supervisé en moyenne <strong>{{ valeur(t.postes_mdr_moyenne) }} postes</strong> par jour ouvré.</p>
+{% if not d.incidents %}
+  {% call encadre("Aucun incident confirmé", "k-bon") %}
+  <p>Aucun incident de sécurité n'a été créé ou traité par les analystes MDR pour {{ d.client }} sur la période.</p>
+  {% endcall %}
+{% else %}
+  <table class="donnees">
+  <thead><tr><th>N°</th><th>Incident</th><th>Créé le</th><th>Priorité</th><th>Statut</th><th>Résolution</th></tr></thead>
+  <tbody>{% for i in d.incidents %}<tr><td>{{ i.numero }}</td><td>{{ i.nom }}</td><td>{{ i.cree }}</td><td>{{ i.priorite }}</td><td>{{ i.statut }}</td><td>{{ i.resolution }}</td></tr>{% endfor %}</tbody>
+  </table>
+{% endif %}
+{% endif %}
+
+{# ===================================================== Menaces #}
+{% if d.categories_menaces %}
+{{ h1("menaces") }}
+<p><strong>{{ t.detections | nb }} détections</strong> cumulées sur les mois consolidés, réparties comme suit :</p>
+<table class="donnees">
+<thead><tr><th>Catégorie</th><th class="c">Détections</th><th class="c">Part</th></tr></thead>
+{% set total_cat = d.categories_menaces.values() | sum %}
+<tbody>{% for cat, n in d.categories_menaces.items() %}<tr><td>{{ cat }}</td><td class="c">{{ n | nb }}</td><td class="c">{{ pct(n, total_cat) }}</td></tr>{% endfor %}</tbody>
+</table>
+{% endif %}
+
+{# ===================================================== Vulnérabilités #}
+{% if d.applications %}
+{{ h1("vulnerabilites") }}
+{% if t.vulnerabilites_critiques_debut is not none %}
+<p>Le nombre de vulnérabilités critiques est passé de <strong>{{ t.vulnerabilites_critiques_debut }}</strong> (premier mois consolidé)
+à <strong>{{ t.vulnerabilites_critiques_fin }}</strong> (dernier mois). Applications les plus concernées en fin de période :</p>
+{% endif %}
+<table class="donnees">
+<thead><tr><th>Application</th><th class="c">Vulnérabilités</th><th class="c">Critiques</th></tr></thead>
+<tbody>{% for appli, i in d.applications %}<tr><td>{{ appli }}</td><td class="c">{{ i.total }}</td><td class="c">{{ i.critiques }}</td></tr>{% endfor %}</tbody>
+</table>
+{% endif %}
+
+{# ===================================================== Actions #}
+{{ h1("actions") }}
+{% if not d.actions %}
+<p>Aucune action corrective n'a été recommandée sur la période.</p>
+{% else %}
+<p>{{ t.actions }} action(s) recommandée(s) dans les rapports mensuels de la période ; avancement au dernier suivi connu :
+{% for statut, n in d.compte_actions.items() %}{{ n }} {{ statut | lower }}{{ ", " if not loop.last else "." }}{% endfor %}</p>
+<table class="donnees">
+<thead><tr><th>Action</th><th>Priorité</th><th>Responsable</th><th>Recommandée en</th><th>Avancement</th></tr></thead>
+<tbody>{% for a in d.actions %}
+<tr><td><strong>{{ a.action }}</strong>{% if a.commentaire %}<span class="justif">{{ a.commentaire }}</span>{% endif %}</td>
+<td>{{ a.priorite | statut }}</td><td>{{ a.responsable }}</td><td class="nobr">{{ a.origine }}</td><td>{{ a.statut | statut }}</td></tr>{% endfor %}</tbody>
+</table>
+{% endif %}
+
+{# ===================================================== Perspectives et conclusion #}
+{{ h1("perspectives") }}
+{{ c.perspectives | md }}
+
+{{ h1("conclusion") }}
+{{ c.conclusion | md }}
+<div class="signature">
+  <div class="nom">{{ presta.signataire }}</div>
+  <div class="societe">{{ presta.nom_complet }}</div>
+</div>
+
+{# ===================================================== Annexes #}
+<div class="annexes">
+<h1 id="annexe-sources">{{ numeros["annexe-sources"] }} {{ titres["annexe-sources"] }}</h1>
+<table class="donnees">
+<thead><tr><th>Mois</th><th>Rapport</th><th>Validé le</th></tr></thead>
+<tbody>{% for m in d.mois %}<tr><td>{{ m.libelle }}</td>
+<td>{{ "Version " ~ m.version if m.present else "Aucun rapport validé" }}</td><td>{{ m.valide_le | fdate if m.valide_le else "—" }}</td></tr>{% endfor %}</tbody>
+</table>
+{% if d.avertissements %}<ul class="puces">{% for a in d.avertissements %}<li>{{ a }}</li>{% endfor %}</ul>{% endif %}
+
+<h1 id="annexe-glossaire">{{ numeros["annexe-glossaire"] }} {{ titres["annexe-glossaire"] }}</h1>
+<table class="donnees">
+<thead><tr><th>Terme</th><th>Définition</th></tr></thead>
+<tbody>{% for terme, definition in GLOSSAIRE %}<tr><td><strong>{{ terme }}</strong></td><td>{{ definition }}</td></tr>{% endfor %}</tbody>
+</table>
+</div>
+</body>
+</html>

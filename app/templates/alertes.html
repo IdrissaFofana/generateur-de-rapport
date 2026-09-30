@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block titre %}Alertes{% endblock %}
+{% block contenu %}
+<div class="en-tete">
+  <div><div class="surtitre">Pilotage</div><h1>Alertes</h1>
+  <p class="sous-titre">Niveau critique, hausse des détections, incident MDR, serveur critique deux mois de suite, licences et échéances.
+  Chaque situation n'est signalée qu'une fois ; les règles sont évaluées à chaque validation, à chaque analyse de fichier et chaque jour.</p></div>
+  {% if utilisateur.peut("operateur") %}
+  <form method="post" action="/alertes/evaluer"><input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="bouton secondaire" type="submit">Réévaluer maintenant</button></form>
+  {% endif %}
+</div>
+
+<form method="get" action="/alertes" class="carte filtres">
+  <div><label for="f-e">État</label><select id="f-e" name="etat">
+    {% for cle, lib in [("ouvertes", "Ouvertes"), ("traitees", "Traitées"), ("toutes", "Toutes")] %}<option value="{{ cle }}" {{ 'selected' if etat == cle }}>{{ lib }}</option>{% endfor %}</select></div>
+  <div><label for="f-t">Type</label><select id="f-t" name="type"><option value="">Tous</option>
+    {% for cle, lib in TYPES.items() %}<option value="{{ cle }}" {{ 'selected' if type_ == cle }}>{{ lib }}</option>{% endfor %}</select></div>
+  <div><label for="f-c">Client</label><select id="f-c" name="client"><option value="">Tous</option>
+    {% for c in clients %}<option value="{{ c.id }}" {{ 'selected' if client_id == c.id }}>{{ c.nom }}</option>{% endfor %}</select></div>
+  <div class="boutons"><button class="bouton" type="submit">Filtrer</button></div>
+</form>
+
+<form method="post" action="/alertes/traiter" id="f-traiter">
+<input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="retour" value="{{ request.url.path }}?{{ request.url.query }}">
+{% if utilisateur.peut("operateur") and lignes %}
+<div class="actions-groupees" style="margin-top:0">
+  <label class="tout-selectionner"><input type="checkbox" onclick="document.querySelectorAll('.choix-alerte').forEach(c => c.checked = this.checked)"><span>Tout sélectionner</span></label>
+  {% if etat != "traitees" %}<button class="bouton petit" type="submit">Marquer comme traitées</button>{% endif %}
+  {% if etat != "ouvertes" %}<button class="bouton petit secondaire" type="submit" name="rouvrir" value="1">Rouvrir</button>{% endif %}
+</div>
+{% endif %}
+<div class="tableau">
+<table class="liste">
+<thead><tr>{% if utilisateur.peut("operateur") %}<th style="width:34px"></th>{% endif %}<th>Niveau</th><th>Alerte</th><th>Type</th><th>Créée</th><th>Suivi</th></tr></thead>
+<tbody>
+{% for a in lignes %}
+<tr class="{{ 'inactif' if a.traitee }}">
+  {% if utilisateur.peut("operateur") %}<td><input type="checkbox" class="choix-alerte" name="ids" value="{{ a.id }}" aria-label="Sélectionner"></td>{% endif %}
+  <td><span class="pastille {{ {'critique': 'erreur', 'avertissement': 'alerte', 'info': 'cours'}.get(a.niveau, 'attente') }}">{{ NIVEAUX.get(a.niveau, a.niveau) }}</span></td>
+  <td><a href="{{ a.lien or '#' }}"><strong>{{ a.titre }}</strong></a><div class="aide">{{ a.detail }}</div></td>
+  <td class="nobr aide">{{ TYPES.get(a.type, a.type) }}</td>
+  <td class="date">{{ a.cree_le | fdatetime }}</td>
+  <td class="aide">{% if a.traitee %}Traitée le {{ a.traitee_le | fdate }}{% if a.traitee_par %} par {{ a.traitee_par.nom }}{% endif %}
+    {% elif a.erreur_notification %}<span style="color:var(--critique)" title="{{ a.erreur_notification }}">Notification échouée</span>
+    {% elif a.notifiee_le %}Notifiée le {{ a.notifiee_le | fdate }}{% else %}—{% endif %}</td>
+</tr>
+{% else %}<tr><td colspan="6" class="vide">Aucune alerte {{ "ouverte" if etat == "ouvertes" else "" }}.</td></tr>{% endfor %}
+</tbody>
+</table>
+</div>
+</form>
+
+<div class="grille-2" style="margin-top:24px">
+  <div class="carte">
+    <div class="titre-carte"><h2>Canaux de notification</h2></div>
+    <ul class="canaux">
+      <li><span class="pastille {{ 'ok' if email and destinataires else 'attente' }}">E-mail</span>
+        {% if email and destinataires %}alertes vers {{ destinataires | join(", ") }}{% elif email %}serveur configuré, <code>ALERTES_EMAILS</code> vide{% else %}non configuré (<code>SMTP_HOTE</code>, <code>SMTP_EXPEDITEUR</code>){% endif %}</li>
+      <li><span class="pastille {{ 'ok' if teams else 'attente' }}">Teams</span>
+        {{ "webhook configuré" if teams else "non configuré (TEAMS_WEBHOOK) — nécessite un accès sortant à internet" }}</li>
+      <li><span class="pastille ok">Plateforme</span> toujours actif : badge dans le menu et cette page</li>
+    </ul>
+    <p class="aide" style="margin:10px 0 0">Configuration dans le fichier <code>.env</code> du serveur (voir INSTALLATION.md), puis redémarrage.</p>
+    {% if utilisateur.peut("admin") %}
+    <form method="post" action="/alertes/test" style="margin-top:12px"><input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="bouton petit secondaire" type="submit">Envoyer un message d'essai</button></form>
+    {% endif %}
+  </div>
+  <div class="carte">
+    <div class="titre-carte"><h2>Résumé hebdomadaire</h2></div>
+    <p class="aide" style="margin-top:0">Chaque lundi (tâche planifiée <code>gerer.py resume-hebdo</code>) : alertes de la semaine, production du mois,
+    clients les plus exposés, contrats à surveiller.
+    Destinataires : {{ destinataires_resume | join(", ") if destinataires_resume else "non configurés (RESUME_EMAILS)" }}{{ " + Teams" if teams }}.</p>
+    {% if utilisateur.peut("admin") %}
+    <div class="en-ligne">
+      <a class="bouton petit secondaire" href="/alertes/resume" target="_blank">Aperçu ↗</a>
+      <form method="post" action="/alertes/resume" onsubmit="return confirm('Envoyer le résumé maintenant ?')"><input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="bouton petit" type="submit">Envoyer maintenant</button></form>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
