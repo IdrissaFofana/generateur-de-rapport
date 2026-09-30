@@ -87,6 +87,25 @@ def actualiser_brouillons(request: Request, annee: int = Form(...), mois: int = 
     return rediriger(f"/production?annee={annee}&mois={mois}")
 
 
+@routes.post("/tableau/mettre-a-jour", dependencies=[Depends(verifier_csrf)])
+def mettre_a_jour_valides(request: Request, annee: int = Form(...), mois: int = Form(...),
+                          u=Depends(exiger("validateur")), db: SessionDB = Depends(session_db)):
+    """Pour chaque client dont le rapport du mois est validé : nouvelle version en brouillon, entièrement régénérée."""
+    from .rapports import mettre_a_jour_rapport
+    _verifier_mois(annee, mois)
+    noms = []
+    for e in _etats(db, annee, mois):
+        r = e["rapport"]
+        if r and r.statut == VALIDE:
+            mettre_a_jour_rapport(db, r, u)
+            noms.append(r.client.nom)
+    db.commit()
+    flash(request, f"{len(noms)} rapport(s) mis à jour en nouvelle version brouillon : {', '.join(noms)}. "
+                   "Relisez-les puis validez-les." if noms else "Aucun rapport validé à mettre à jour pour ce mois.",
+          "succes" if noms else "info")
+    return rediriger(f"/production?annee={annee}&mois={mois}")
+
+
 @routes.get("/tableau/pdf-valides.zip")
 def pdf_valides(annee: int, mois: int, u=Depends(exiger("lecteur")), db: SessionDB = Depends(session_db)):
     """Archive ZIP des PDF validés du mois (dernière version validée de chaque client)."""

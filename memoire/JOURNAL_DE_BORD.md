@@ -274,3 +274,78 @@ Tests : 43 unitaires ; 8 suites, 220 vérifications (essai_service : 46). Migrat
   mal en navigation automatisée (→ réaction directe au clic sur les boutons, plus robuste).
 - Un test de bout en bout supposait l'absence de client « KSC seul » ; un client réel de ce profil ayant été créé,
   le test compte désormais les clients concernés au lieu de présumer la composition du portefeuille.
+
+## 30/09/2026 — Couverture MDR : un indicateur trompeur corrigé ✅
+
+**Constat (relevé par l'utilisateur sur un rapport réel)** : Client A affichait « Postes supervisés par le MDR :
+25,4 — **Normal** » alors que 27 appareils au plus sur 49 transmettaient leur télémétrie (55,1 %). Le statut ne
+vérifiait que la présence d'au moins un poste ; le niveau de risque ne pénalisait que l'absence totale de télémétrie.
+Le plan d'action proposait pourtant déjà « Étendre la supervision MDR » sous 80 % : incohérence entre sections.
+
+**Correction** : une règle unique `couverture_mdr` (maximum supervisé / appareils administrés), utilisée par le
+tableau des indicateurs (PDF et Word), le texte de la section MDR et le calcul du risque.
+
+| Couverture | Statut | Effet sur le risque |
+|---|---|---|
+| ≥ 95 % | Normal | — |
+| 80 à 95 % | À surveiller | — |
+| 50 à 80 % | Élevé | +1 point, motif affiché |
+| < 50 % ou aucun poste | Critique | +2 points, motif affiché |
+| parc KSC inconnu (pas d'export) | Non mesurée | — |
+
+- Nouvelle ligne « Couverture MDR du parc » (27 / 49, 55,1 %) ; le texte nomme les appareils hors supervision et les
+  causes à vérifier (déploiement de l'agent, licences, appareils disparus encore présents dans la console).
+- *Choix* : sans export KSC, afficher « Normal » serait une affirmation non vérifiée → « Non mesurée ».
+- Client A : risque 10 → 11 points (reste Critique), motif « 22 appareils sur 49 hors de la supervision MDR ».
+- Portée : statuts et tableau recalculés à l'affichage (brouillons et nouveaux PDF) ; textes d'un brouillon existant
+  mis à jour par « Régénérer les textes » ; rapports déjà validés inchangés (PDF archivé).
+- **Enseignement pour le mémoire** : un indicateur binaire (« au moins un poste ») masque une dégradation partielle ;
+  l'erreur n'a été détectée que par la relecture d'un expert — argument en faveur du vérificateur de faits (axe 1)
+  et de règles de cohérence entre sections.
+
+## 30/09/2026 — Raisons d'état KSC : diagnostic, recommandations et classement ✅
+
+**Besoin** : l'export « État de la protection » fourni par le client contient, pour chaque appareil, une colonne
+**Raison** (ex. « L'appareil n'est plus administré. L'appareil ne s'est pas connecté au Serveur d'administration
+depuis longtemps ») et un « état défini par l'application » (ex. « Serveurs de KSN indisponibles »). Le rapport n'en
+tirait qu'un comptage par anomalie.
+
+**Réalisation**
+- **Lecture phrase par phrase** de la raison (16 raisons reconnues au lieu de 10 : licence, applications
+  incompatibles, menaces non traitées, chiffrement, espace disque…). Une phrase inconnue n'est plus ignorée : elle
+  devient « autre » et son texte exact est affiché dans le rapport. Les raisons sont réanalysées à chaque
+  consolidation : une amélioration du lecteur profite aux exports déjà déposés.
+- **Base de diagnostic** : pour chaque raison, cause probable, recommandation opérationnelle (terminologie
+  Kaspersky : Agent d'administration, klmover, proxy KSN, stratégie verrouillée…) et responsable.
+- Rapport, section « État de la protection » : **3.1 Diagnostic par raison et recommandations** (raison, appareils
+  critiques / avertissement / serveurs, impact, cause, recommandation, responsable) ; **3.2 Appareils par état et par
+  raison** (groupes état × combinaison de raisons, avec les noms des appareils : un groupe = une action) ; annexe
+  triée par état puis par gravité de la raison. Même contenu dans l'export Word.
+- **Plan d'action** : actions ajoutées pour les raisons jusque-là sans action ; noms des appareils cités quand ils
+  sont cinq au plus.
+- Vérification : lecture identique à l'ancienne sur les 49 appareils réels de Client A (0 différence) ; 46 tests
+  unitaires, 8 suites de bout en bout.
+
+**Mesure (Client A, septembre)** : 5 raisons distinctes, 7 groupes état × raison ; la raison la plus fréquente (KSN
+inaccessible) touche 34 appareils dont 11 serveurs — une seule action réseau traite 69 % du parc en anomalie.
+
+**Intérêt pour le mémoire** : c'est une forme de **système expert** (base de règles cause → recommandation) ; elle
+fournit (1) une référence de base pour la génération de recommandations par LLM (axe 1) et (2) les « faits » que le
+vérificateur devra retrouver dans le texte généré.
+
+## 30/09/2026 — Mise à jour des rapports déjà validés ✅
+
+- **Besoin** : des rapports ont été validés avant les dernières améliorations (diagnostic par raison, couverture
+  MDR) ; « Nouvelle version » recalculait les chiffres mais recopiait les textes et le plan d'action de la version
+  validée, sans les nouvelles recommandations.
+- **Solution** : bouton **« Mettre à jour »** sur un rapport ou un bilan validé (validateurs) : nouvelle version en
+  brouillon **entièrement régénérée** (chiffres, textes, plan d'action) ; la version validée et son PDF restent
+  archivés (principe d'immuabilité des documents envoyés). « Nouvelle version (garder mes textes) » reste disponible.
+  Action groupée sur la page Production : « Mettre à jour les rapports validés » du mois. Bandeau sur un rapport
+  validé produit avant les améliorations.
+- **Défaut de test découvert** : le nettoyage de `essai_rapports` supprimait *tous* les rapports d'un client réel
+  (et non ceux créés par le test) ; sans conséquence (aucun rapport réel en base locale), corrigé : suppression
+  limitée aux rapports créés par les comptes d'essai.
+- **Observation à traiter** : écart de 2 h entre les horodatages posés par PostgreSQL (`now()`, fuseau du serveur de
+  base) et ceux posés par l'application (`datetime.now()`) : fuseaux horaires à aligner (serveur en UTC+0).
+- Tests : essai_rapports 23 vérifications (+5).

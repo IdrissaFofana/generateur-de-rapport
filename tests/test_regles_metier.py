@@ -54,3 +54,37 @@ def test_courbes_echelle_et_variation():
     points = [{"libelle": "a", "indicateurs": {"x": 10}}, {"libelle": "b", "indicateurs": {"x": None}},
               {"libelle": "c", "indicateurs": {"x": 7}}]
     assert courbes.variation(points, "x") == (-3, "−3")
+
+
+def test_couverture_mdr():
+    from app.moteur.analyse import couverture_mdr
+    statut = lambda mx, total: couverture_mdr({"max": mx, "tenant_trouve": True}, {"total": total})["statut"]
+    assert statut(27, 49) == "Élevé"          # 55 % : ce n'est pas « Normal »
+    assert statut(47, 49) == "Normal" and statut(40, 49) == "À surveiller" and statut(20, 49) == "Critique"
+    assert couverture_mdr({"max": 0, "tenant_trouve": True}, {"total": 49})["statut"] == "Critique"
+    assert couverture_mdr({"max": 12, "tenant_trouve": True}, None)["statut"] == "Non mesurée"  # sans export KSC : pas de dénominateur
+    assert couverture_mdr(None, {"total": 49}) is None
+
+
+def test_lecture_des_raisons_ksc():
+    from app.moteur.lecture_ksc import analyser_raison
+    assert analyser_raison("L'appareil n'est plus administré. L'appareil ne s'est pas connecté au Serveur d'administration depuis longtemps .",
+                           "N/A") == (["deconnecte", "non_administre"], [])
+    assert analyser_raison("État de l'appareil défini par l'application .", "Serveurs de KSN indisponibles") == (["ksn"], [])
+    assert analyser_raison("La licence a expiré. Des applications incompatibles sont installées.", "N/A")[0] == ["incompatible", "licence"]
+    # une raison inconnue n'est pas perdue
+    assert analyser_raison("Le disque est plein.", "") == (["autre"], ["Le disque est plein"])
+
+
+def test_diagnostic_et_classement():
+    from app.moteur.analyse import classement_etat_raison, diagnostic_par_raison
+    app_ = lambda nom, etat, cles, serveur=False: {"appareil": nom, "etat": etat, "anomalies": cles, "serveur": serveur}
+    parc = [app_("A", "Critique", ["ksn"], True), app_("B", "Critique", ["ksn"]), app_("C", "Critique", ["deconnecte", "non_administre"]),
+            app_("D", "Avertissement", ["deconnecte"])]
+    diag = diagnostic_par_raison(parc)
+    assert [l["cle"] for l in diag] == ["non_administre", "deconnecte", "ksn"]  # impact « Très élevé » d'abord
+    ksn = next(l for l in diag if l["cle"] == "ksn")
+    assert ksn["appareils"] == 2 and ksn["serveurs"] == 1 and ksn["recommandation"]
+    cl = classement_etat_raison(parc)
+    assert [(g["etat"], g["appareils"]) for g in cl] == [("Critique", 2), ("Critique", 1), ("Avertissement", 1)]
+    assert cl[1]["cles"] == ["non_administre", "deconnecte"]

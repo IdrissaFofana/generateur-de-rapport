@@ -32,6 +32,13 @@
   {% endif %}
   {% if valides %}
   <a class="bouton petit secondaire" href="/tableau/pdf-valides.zip?annee={{ annee }}&mois={{ mois }}">Télécharger les PDF validés <span class="compteur">{{ valides }}</span></a>
+  {% if utilisateur.peut("validateur") %}
+  <form method="post" action="/tableau/mettre-a-jour" data-confirmer-libelle="Mettre à jour"
+        data-confirmer="Mettre à jour les {{ valides }} rapport(s) validé(s) de {{ fmt_mois(annee, mois) }} ? Pour chacun, une nouvelle version est créée en brouillon avec les données et les règles actuelles (textes régénérés). Les versions validées restent archivées.">
+    <input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="annee" value="{{ annee }}"><input type="hidden" name="mois" value="{{ mois }}">
+    <button class="bouton petit secondaire" type="submit" title="Nouvelle version régénérée pour chaque rapport validé du mois">Mettre à jour les rapports validés <span class="compteur">{{ valides }}</span></button>
+  </form>
+  {% endif %}
   {% endif %}
 </div>
 {% endif %}

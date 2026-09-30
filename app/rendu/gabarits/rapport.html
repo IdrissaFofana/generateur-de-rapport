@@ -99,8 +99,13 @@
 <thead><tr><th>Indicateur</th><th class="c">Valeur</th><th>Statut</th><th class="c">Évolution*</th></tr></thead>
 <tbody>
 {% if mdr %}
+{% set cmdr = couverture_mdr(mdr, p) %}
 <tr><td>Postes supervisés par le MDR (moyenne jours ouvrés)</td><td class="c">{{ (mdr.moyenne_ouvres or mdr.moyenne) | virgule }}</td>
-    <td>{{ ("Critique" if not mdr.max else "Normal") | statut }}</td><td class="c">{{ evolution("postes_mdr_moyenne") }}</td></tr>
+    <td>{{ cmdr.statut | statut }}</td><td class="c">{{ evolution("postes_mdr_moyenne") }}</td></tr>
+{% if cmdr.taux is not none %}
+<tr><td>Couverture MDR du parc (maximum supervisé / appareils administrés)</td><td class="c">{{ cmdr.supervises }} / {{ cmdr.administres }} ({{ pct(cmdr.supervises, cmdr.administres) }})</td>
+    <td>{{ cmdr.statut | statut }}</td><td class="c">—</td></tr>
+{% endif %}
 <tr><td>Incidents de sécurité MDR</td><td class="c">{{ mdr.incidents | length }}</td>
     <td>{{ ("Critique" if mdr.incidents else "Aucun") | statut }}</td><td class="c">{{ evolution("incidents_mdr") }}</td></tr>
 {% endif %}
@@ -213,11 +218,42 @@ reflète la couverture effective de la supervision.</p>
   {{ figure("parc", "Répartition des appareils par état de protection", "etroit") }}
 
   {{ h2("anomalies") }}
+  {% if p.diagnostic %}
+  <p>Chaque appareil en anomalie est accompagné, dans la console Kaspersky Security Center, de la <strong>raison</strong> de son
+  état. Le tableau ci-dessous regroupe ces raisons, du plus fort au plus faible impact, avec leur cause probable et l'action recommandée.</p>
+  <table class="donnees diagnostic">
+  <thead><tr><th style="width:34%">Raison signalée</th><th class="c">Appareils</th><th>Impact</th><th>Recommandation</th></tr></thead>
+  <tbody>{% for l in p.diagnostic %}<tr>
+    <td><strong>{{ l.libelle }}</strong><span class="justif">Cause probable : {{ l.cause }}</span></td>
+    <td class="c nobr">{{ l.appareils }}<span class="justif">{{ l.critiques }} crit.{% if l.avertissements %} · {{ l.avertissements }} avert.{% endif %}{% if l.serveurs %}<br>dont {{ l.serveurs }} {{ pluriel(l.serveurs, "serveur") }}{% endif %}</span></td>
+    <td>{{ l.impact | statut }}</td>
+    <td>{{ l.recommandation }}<span class="justif">Responsable : {{ l.responsable }}</span></td>
+  </tr>{% endfor %}</tbody>
+  </table>
+  <p class="note">Un même appareil peut cumuler plusieurs raisons ; il est alors compté dans chacune.</p>
+  {% if p.raisons_inconnues %}<p class="note">Raisons non répertoriées, à examiner dans la console :
+    {% for texte, n in p.raisons_inconnues %}« {{ texte }} » ({{ n }}){{ " ; " if not loop.last }}{% endfor %}.</p>{% endif %}
+  {% else %}
   <table class="donnees">
   <thead><tr><th>Anomalie</th><th class="c">Appareils</th><th>Impact</th></tr></thead>
   <tbody>{% for cle, n in p.anomalies.items() %}<tr><td>{{ LIBELLES[cle] }}</td><td class="c">{{ n }}</td><td>{{ IMPACTS[cle] | statut }}</td></tr>{% endfor %}</tbody>
   </table>
   <p class="note">Un même appareil peut cumuler plusieurs anomalies.</p>
+  {% endif %}
+
+  {% if p.classement %}
+  {{ h2("classement") }}
+  <p>Appareils regroupés par état puis par combinaison de raisons : un même groupe se traite par une même action.</p>
+  <table class="donnees classement">
+  <thead><tr><th>État</th><th>Raison(s)</th><th class="c">Appareils</th><th>Appareils concernés</th></tr></thead>
+  <tbody>{% for g in p.classement %}<tr>
+    <td>{{ g.etat | statut }}</td><td>{{ g.libelle }}</td>
+    <td class="c">{{ g.appareils }}{% if g.serveurs %}<span class="justif">dont {{ g.serveurs }} serv.</span>{% endif %}</td>
+    <td class="noms">{{ g.noms[:8] | join(", ") }}{% if g.noms | length > 8 %} … et {{ g.noms | length - 8 }} autres{% endif %}</td>
+  </tr>{% endfor %}</tbody>
+  </table>
+  <p class="note">Liste complète, triée par état et par raison, en annexe.</p>
+  {% endif %}
 
   {% if p.anomalies.get("ksn") %}
   {% call encadre("Point critique : serveurs KSN inaccessibles", "k-critique") %}
@@ -384,7 +420,7 @@ dans le prochain rapport.</p>
 {% if p %}
 <h1 id="annexe-appareils">{{ numeros["annexe-appareils"] }} {{ titres["annexe-appareils"] }}</h1>
 <table class="donnees petit">
-<thead><tr><th>Appareil</th><th>Service</th><th>État</th><th>Anomalies</th></tr></thead>
+<thead><tr><th>Appareil</th><th>Service</th><th>État</th><th>Raison(s)</th></tr></thead>
 <tbody>{% for a in appareils_tries(p.appareils) %}<tr><td>{{ a.appareil }}</td><td>{{ a.groupe }}</td><td>{{ a.etat | statut }}</td>
 <td>{{ (a.anomalies | anomalies) or a.raison }}</td></tr>{% endfor %}</tbody>
 </table>

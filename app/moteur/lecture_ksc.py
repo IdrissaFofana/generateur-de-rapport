@@ -50,38 +50,65 @@ def _complet(texte):
 # --------------------------------------------------------------------------- #
 # État de la protection
 # --------------------------------------------------------------------------- #
+# Raisons d'état KSC (colonne « Raison » et « État de l'appareil défini par l'application ») → anomalie normalisée.
+# Lecture phrase par phrase ; l'ordre compte (première correspondance retenue pour une phrase).
+MOTIFS_RAISON = [
+    ("non_administre", ("plus administré", "n'est pas administré")),
+    ("deconnecte", ("pas connecté au serveur", "agent d'administration est inactif", "inactif depuis")),
+    ("analyse_ancienne", ("recherche d'applications malveillantes", "analyse complète", "pas été analysé")),
+    ("bases_depassees", ("bases sont dépassées", "bases obsolètes", "bases antivirus", "bases n'ont pas été mises à jour",
+                         "bases dépassées")),
+    ("non_installe", ("n'est pas installée", "non installée", "pas installé")),
+    ("protection_desactivee", ("désactivé", "n'est pas en cours", "protection en temps réel", "protection est arrêtée")),
+    ("redemarrage", ("redémarr",)),
+    ("licence", ("licence",)),
+    ("objets_non_traites", ("non traité", "objets actifs", "menaces actives", "non désinfecté")),
+    ("menaces_nombreuses", ("trop de", "nombre de virus", "nombre de menaces", "nombreuses menaces")),
+    ("incompatible", ("incompatible",)),
+    ("vulnerabilites", ("vulnérabilit",)),
+    ("maj_logicielles", ("mises à jour", "windows update", "correctifs")),
+    ("chiffrement", ("chiffr",)),
+    ("disque", ("espace disque",)),
+    ("ksn", ("ksn",)),
+]
+RENVOI_APPLICATION = "état de l'appareil défini par l'application"  # renvoie à la colonne « état défini par l'application »
+
+
+def _phrases(texte):
+    return [p.strip(" .") for p in re.split(r"\.\s+|\s*\.\s*$", (texte or "").strip()) if p.strip(" .")]
+
+
+def _cle_raison(phrase):
+    p = phrase.lower()
+    return next((cle for cle, motifs in MOTIFS_RAISON if any(m in p for m in motifs)), None)
+
+
+def analyser_raison(raison, etat_app):
+    """(anomalies normalisées triées, phrases non reconnues). Une raison inconnue n'est jamais perdue : elle devient
+    « autre » et son texte est conservé pour être affiché dans le rapport."""
+    anomalies, inconnues = set(), []
+    for phrase in _phrases(raison):
+        if phrase.lower() == RENVOI_APPLICATION:
+            continue
+        cle = _cle_raison(phrase)
+        if cle:
+            anomalies.add(cle)
+        else:
+            anomalies.add("autre")
+            inconnues.append(phrase)
+    e = (etat_app or "").strip()
+    if e and e.lower() not in ("n/a", "ok", "—"):
+        cle = _cle_raison(e)
+        if cle:
+            anomalies.add(cle)
+        else:
+            anomalies.add("autre")
+            inconnues.append(e)
+    return sorted(anomalies), inconnues
+
+
 def _anomalies(raison, etat_app):
-    """Transforme les raisons KSC en anomalies normalisées."""
-    r = raison.lower()
-    a = []
-    if "plus administré" in r:
-        a.append("non_administre")
-    if "pas connecté au serveur" in r:
-        a.append("deconnecte")
-    if "recherche d'applications malveillantes" in r:
-        a.append("analyse_ancienne")
-    if "bases sont dépassées" in r or "bases obsolètes" in r:
-        a.append("bases_depassees")
-    if "n'est pas installée" in r or "non installée" in r:
-        a.append("non_installe")
-    if "désactivée" in r or "n'est pas en cours" in r or "protection en temps réel" in r:
-        a.append("protection_desactivee")
-    if "redémarrage" in r:
-        a.append("redemarrage")
-    if "licence" in r:
-        a.append("licence")
-    e = (etat_app or "").lower()
-    if "ksn" in e:
-        a.append("ksn")
-    elif "désactiv" in e:
-        a.append("protection_desactivee")
-    elif "redémarrage" in e:
-        a.append("redemarrage")
-    elif "licence" in e:
-        a.append("licence")
-    elif e not in ("", "n/a") and "application" in r:
-        a.append("autre")
-    return sorted(set(a))
+    return analyser_raison(raison, etat_app)[0]
 
 
 def _lire_protection(doc, texte):

@@ -15,7 +15,7 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
 
-from ..moteur.analyse import IMPACT_ANOMALIES, LIBELLES_ANOMALIES
+from ..moteur.analyse import IMPACT_ANOMALIES, LIBELLES_ANOMALIES, couverture_mdr
 from ..moteur.outils import fmt_date, fmt_mois, fmt_nb, fmt_pct
 from . import graphiques
 from .pdf import (DESCRIPTIONS_MENACES, GLOSSAIRE, anomalies, appareils_tries, construire_plan, evolution,
@@ -383,9 +383,15 @@ class Word:
         ev = lambda cle: evolution(d, cle)  # noqa: E731
         lignes = []
         if mdr:
+            cmdr = couverture_mdr(mdr, p)
             lignes += [["Postes supervisés par le MDR (moyenne jours ouvrés)",
                         str(round(mdr["moyenne_ouvres"] or mdr["moyenne"], 1)).replace(".", ","),
-                        "Critique" if not mdr["max"] else "Normal", ev("postes_mdr_moyenne")],
+                        cmdr["statut"], ev("postes_mdr_moyenne")]]
+            if cmdr["taux"] is not None:
+                lignes += [["Couverture MDR du parc (maximum supervisé / appareils administrés)",
+                            f"{cmdr['supervises']} / {cmdr['administres']} ({fmt_pct(cmdr['supervises'], cmdr['administres'])})",
+                            cmdr["statut"], "—"]]
+            lignes += [
                        ["Incidents de sécurité MDR", str(len(mdr["incidents"])),
                         "Critique" if mdr["incidents"] else "Aucun", ev("incidents_mdr")]]
         if p:
@@ -454,9 +460,28 @@ class Word:
         self.texte(self.c["commentaires"]["protection"])
         self.image(g.get("parc"), 16, "Répartition des appareils par état de protection")
         self.h2("anomalies")
-        self.tableau(["Anomalie", "Appareils", "Impact"],
-                     [[LIBELLES_ANOMALIES[k], n, IMPACT_ANOMALIES[k]] for k, n in p["anomalies"].items()],
-                     [10.5, 2.5, 4], statuts=(2,), centre=(1,))
+        if p.get("diagnostic"):
+            self.para("Chaque appareil en anomalie est accompagné, dans la console, de la raison de son état. Ces raisons sont "
+                      "regroupées ci-dessous avec leur cause probable et l'action recommandée.")
+            self.tableau(["Raison signalée", "Appareils", "Impact", "Recommandation"],
+                         [[f"**{l['libelle']}** — cause probable : {l['cause']}",
+                           f"{l['appareils']} ({l['critiques']} crit." + (f", {l['avertissements']} avert." if l["avertissements"] else "") + ")",
+                           l["impact"], f"{l['recommandation']} Responsable : {l['responsable']}."]
+                          for l in p["diagnostic"]], [5.2, 2.2, 2.3, 7.3], statuts=(2,), centre=(1,), taille=8.5)
+            if p.get("raisons_inconnues"):
+                self.para("Raisons non répertoriées, à examiner dans la console : "
+                          + " ; ".join(f"« {t} » ({n})" for t, n in p["raisons_inconnues"]) + ".", italique=True, taille=8.5)
+        else:
+            self.tableau(["Anomalie", "Appareils", "Impact"],
+                         [[LIBELLES_ANOMALIES[k], n, IMPACT_ANOMALIES[k]] for k, n in p["anomalies"].items()],
+                         [10.5, 2.5, 4], statuts=(2,), centre=(1,))
+        if p.get("classement"):
+            self.h2("classement")
+            self.para("Appareils regroupés par état puis par combinaison de raisons : un même groupe se traite par une même action.")
+            self.tableau(["État", "Raison(s)", "Appareils", "Appareils concernés"],
+                         [[g["etat"], g["libelle"], g["appareils"],
+                           ", ".join(g["noms"][:8]) + (f" … et {len(g['noms']) - 8} autres" if len(g["noms"]) > 8 else "")]
+                          for g in p["classement"]], [2.5, 6, 2, 6.5], statuts=(0,), centre=(2,), taille=8.5)
         if p["serveurs"]:
             self.h2("serveurs")
             self.tableau(["Serveur", "Système", "État", "Anomalies"],

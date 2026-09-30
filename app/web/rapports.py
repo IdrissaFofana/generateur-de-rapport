@@ -183,6 +183,32 @@ def nouvelle_version(request: Request, rid: int, u=Depends(validateur), db: Sess
     return rediriger(f"/rapports/{nouveau.id}")
 
 
+def mettre_a_jour_rapport(db, r, u):
+    """Nouvelle version d'un rapport validé, entièrement recalculée : chiffres, textes et plan d'action régénérés à
+    partir des fichiers déposés et des règles actuelles. La version validée reste archivée telle quelle."""
+    if r.periodicite == "mensuel":
+        nouveau = services.creer_brouillon(db, r.client, r.annee, r.mois, u)
+    else:
+        nouveau = services.creer_bilan(db, r.client, r.periodicite, r.annee, mbilan.numero_periode(r.periodicite, r.mois), u)
+    journaliser(db, u, "mise à jour (nouvelle version régénérée)", f"{_ref(nouveau)} depuis v{r.version}")
+    return nouveau
+
+
+@routes.post("/rapports/{rid}/mettre-a-jour", dependencies=[Depends(verifier_csrf)])
+def mettre_a_jour(request: Request, rid: int, u=Depends(validateur), db: SessionDB = Depends(session_db)):
+    r = _rapport(db, rid, u)
+    dernier = services.dernier_rapport(db, r.client_id, r.annee, r.mois, periodicite=r.periodicite)
+    if dernier.statut == BROUILLON:
+        flash(request, f"Un brouillon (v{dernier.version}) existe déjà : utilisez « Actualiser les chiffres » "
+                       "ou « Régénérer les textes ».", "info")
+        return rediriger(f"/rapports/{dernier.id}")
+    nouveau = mettre_a_jour_rapport(db, r, u)
+    db.commit()
+    flash(request, f"Version v{nouveau.version} créée en brouillon, recalculée avec les données et les règles actuelles. "
+                   f"Relisez-la puis validez-la ; la v{r.version} reste archivée.")
+    return rediriger(f"/rapports/{nouveau.id}")
+
+
 @routes.get("/rapports/{rid}/pdf")
 def telecharger_pdf(rid: int, u=Depends(lecteur), db: SessionDB = Depends(session_db)):
     r = _rapport(db, rid, u)

@@ -10,7 +10,7 @@ from datetime import date, datetime
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 from markupsafe import Markup, escape
 
-from ..moteur.analyse import IMPACT_ANOMALIES, LIBELLES_ANOMALIES
+from ..moteur.analyse import IMPACT_ANOMALIES, LIBELLES_ANOMALIES, couverture_mdr
 from ..moteur.outils import fmt_date, fmt_mois, fmt_nb, fmt_pct, pluriel
 from . import graphiques
 
@@ -98,7 +98,9 @@ def construire_plan(d, contenu=None):
         plan.append(("mdr", "Supervision MDR (Managed Detection and Response)", sous))
     sous = []
     if p:
-        sous.append(("anomalies", "Anomalies relevées"))
+        sous.append(("anomalies", "Diagnostic par raison et recommandations"))
+        if p.get("classement"):
+            sous.append(("classement", "Appareils par état et par raison"))
         if p["serveurs"]:
             sous.append(("serveurs", "Serveurs"))
         if p["hors_ligne"]:
@@ -151,7 +153,10 @@ def groupes_tries(groupes):
 
 
 def appareils_tries(appareils):
-    return sorted(appareils, key=lambda a: (a["etat"] != "Critique", a["groupe"], a["appareil"]))
+    """État (critique d'abord), puis raison la plus grave, puis nombre de raisons, puis service et nom."""
+    from ..moteur.analyse import ORDRE_IMPACT
+    grav = lambda a: min((ORDRE_IMPACT.get(IMPACT_ANOMALIES.get(k, "Modéré"), 9) for k in a["anomalies"]), default=9)
+    return sorted(appareils, key=lambda a: (a["etat"] != "Critique", grav(a), -len(a["anomalies"]), a["groupe"], a["appareil"]))
 
 
 def _cle_version(v):
@@ -169,7 +174,7 @@ _env = Environment(loader=FileSystemLoader(os.path.join(ICI, "gabarits")), exten
                    autoescape=select_autoescape(["html"]), trim_blocks=True, lstrip_blocks=True)
 _env.filters.update(md=md, md_ligne=md_ligne, statut=statut, fdate=fdate, fdate_courte=fdate_courte,
                     nb=fmt_nb, virgule=virgule, sans_heure=sans_heure, slug=_slug, anomalies=anomalies)
-_env.globals.update(pct=fmt_pct, pluriel=pluriel, LIBELLES=LIBELLES_ANOMALIES, IMPACTS=IMPACT_ANOMALIES,
+_env.globals.update(couverture_mdr=couverture_mdr, pct=fmt_pct, pluriel=pluriel, LIBELLES=LIBELLES_ANOMALIES, IMPACTS=IMPACT_ANOMALIES,
                     DESCRIPTIONS=DESCRIPTIONS_MENACES, GLOSSAIRE=GLOSSAIRE, groupes_tries=groupes_tries,
                     appareils_tries=appareils_tries, versions=versions)
 

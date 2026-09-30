@@ -17,8 +17,15 @@
   <div class="en-ligne">
     {% if r.statut == "valide" %}
       {% if utilisateur.peut("validateur") and versions[0].id == r.id %}
-      <form method="post" action="/rapports/{{ r.id }}/nouvelle-version"><input type="hidden" name="csrf" value="{{ csrf }}">
-        <button class="bouton secondaire" type="submit">Créer une nouvelle version</button></form>
+      <form method="post" action="/rapports/{{ r.id }}/nouvelle-version"
+            data-confirmer="Créer une nouvelle version en gardant les textes et le plan d'action de la v{{ r.version }} ? Les chiffres et les tableaux seront recalculés.">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="bouton secondaire" type="submit" title="Chiffres recalculés, textes de la version actuelle conservés">Nouvelle version (garder mes textes)</button></form>
+      <form method="post" action="/rapports/{{ r.id }}/mettre-a-jour"
+            data-confirmer="Mettre à jour ce rapport ? Une nouvelle version sera créée en brouillon : chiffres, textes et plan d'action régénérés avec les données et les règles actuelles. La v{{ r.version }} validée reste archivée ; vos modifications de texte ne seront pas reprises."
+            data-confirmer-libelle="Mettre à jour">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="bouton" type="submit" title="Nouvelle version entièrement régénérée">Mettre à jour</button></form>
       {% endif %}
       <a class="bouton" href="/rapports/{{ r.id }}/pdf">Télécharger le PDF</a>
     {% else %}
@@ -35,6 +42,11 @@
   </div>
 </div>
 
+{% if r.statut == "valide" and versions[0].id == r.id and d.protection and d.protection.diagnostic is not defined %}
+<div class="message info"><div><strong>Ce rapport a été produit avant les dernières améliorations</strong> (diagnostic et
+recommandations par raison, classement des appareils par état et par raison, statut de couverture MDR).
+{% if utilisateur.peut("validateur") %}« Mettre à jour » crée une nouvelle version qui en tient compte ; la version validée reste archivée.{% endif %}</div></div>
+{% endif %}
 {% if d.avertissements %}
 <div class="message info"><div><strong>À noter sur les données</strong><ul>{% for a in d.avertissements %}<li>{{ a }}</li>{% endfor %}</ul></div></div>
 {% endif %}

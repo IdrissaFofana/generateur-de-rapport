@@ -16,14 +16,74 @@ LIBELLES_ANOMALIES = {
     "non_installe": "Application de sécurité non installée",
     "redemarrage": "Redémarrage requis",
     "licence": "Problème de licence",
+    "objets_non_traites": "Menaces détectées non traitées",
+    "menaces_nombreuses": "Nombre élevé de menaces détectées",
+    "incompatible": "Application incompatible installée",
+    "vulnerabilites": "Vulnérabilités logicielles détectées",
+    "maj_logicielles": "Mises à jour logicielles en attente",
+    "chiffrement": "Problème de chiffrement",
+    "disque": "Espace disque insuffisant",
     "autre": "Autre état signalé par l'application",
 }
 IMPACT_ANOMALIES = {
     "ksn": "Élevé", "deconnecte": "Élevé", "non_administre": "Très élevé",
     "analyse_ancienne": "Modéré", "bases_depassees": "Élevé",
     "protection_desactivee": "Très élevé", "non_installe": "Très élevé",
-    "redemarrage": "Faible", "licence": "Élevé", "autre": "Modéré",
+    "redemarrage": "Faible", "licence": "Élevé", "objets_non_traites": "Très élevé", "menaces_nombreuses": "Élevé",
+    "incompatible": "Élevé", "vulnerabilites": "Élevé", "maj_logicielles": "Modéré", "chiffrement": "Élevé",
+    "disque": "Modéré", "autre": "Modéré",
 }
+ORDRE_IMPACT = {"Très élevé": 0, "Élevé": 1, "Modéré": 2, "Faible": 3}
+# Pour chaque raison d'état KSC : cause probable, recommandation, responsable. Base des recommandations du rapport.
+DIAGNOSTIC_ANOMALIES = {
+    "ksn": ("Flux sortants vers les services cloud Kaspersky (KSN) bloqués par le pare-feu ou le proxy, ou proxy KSN "
+            "du Serveur d'administration désactivé.",
+            "Autoriser les flux HTTPS vers les services KSN sur le pare-feu / proxy, ou activer le proxy KSN du Serveur "
+            "d'administration (port 13111) et le définir dans la stratégie ; contrôler ensuite l'état dans la console.", "ESAY + client"),
+    "deconnecte": ("Appareil éteint depuis longtemps, sorti du réseau, réinstallé sans agent, ou Agent d'administration "
+                   "arrêté / bloqué par le pare-feu.",
+                   "Confirmer avec le client que l'appareil existe encore. S'il est actif : redémarrer le service de l'Agent "
+                   "d'administration et vérifier le flux vers le Serveur d'administration (port 13000). S'il n'existe "
+                   "plus : le supprimer de la console.", "ESAY + client"),
+    "non_administre": ("Agent d'administration désinstallé, appareil réinstallé ou rattaché à un autre Serveur d'administration.",
+                       "Réinstaller l'Agent d'administration (paquet d'installation) ou le réaffecter au bon serveur "
+                       "(utilitaire klmover) ; supprimer de la console les appareils retirés du parc.", "ESAY"),
+    "analyse_ancienne": ("Tâche d'analyse complète absente, mal planifiée, ou appareil éteint aux heures prévues.",
+                         "Créer ou corriger la tâche d'analyse complète hebdomadaire, avec lancement des analyses manquées "
+                         "au démarrage ; lancer une analyse immédiate sur les appareils concernés.", "ESAY"),
+    "bases_depassees": ("Mises à jour non reçues : appareil peu connecté, tâche de mise à jour absente ou source "
+                        "(serveur, point de distribution) inaccessible.",
+                        "Vérifier la tâche de mise à jour des bases et le point de distribution ; forcer une mise à jour "
+                        "et contrôler la date des bases.", "ESAY"),
+    "protection_desactivee": ("Protection arrêtée par un utilisateur, une application tierce ou un paramètre de stratégie non verrouillé.",
+                              "Réactiver la protection en temps réel, verrouiller le paramètre dans la stratégie (cadenas) "
+                              "et protéger par mot de passe l'arrêt de l'application.", "ESAY"),
+    "non_installe": ("Kaspersky Endpoint Security jamais déployé ou désinstallé.",
+                     "Déployer Kaspersky Endpoint Security par une tâche d'installation à distance.", "ESAY"),
+    "redemarrage": ("Mise à jour de l'application ou du système en attente de redémarrage.",
+                    "Planifier le redémarrage avec l'utilisateur ou par une tâche, hors des heures de travail.", "Client"),
+    "licence": ("Licence expirée, non distribuée ou nombre de postes dépassé.",
+                "Vérifier la clé de licence et le nombre de postes couverts ; activer la distribution automatique de la clé "
+                "et anticiper le renouvellement.", "ESAY + client"),
+    "objets_non_traites": ("Menaces détectées que l'application n'a pas pu désinfecter ni supprimer.",
+                           "Lancer une analyse complète et traiter les objets (désinfection, quarantaine) ; isoler l'appareil "
+                           "si la menace persiste.", "ESAY"),
+    "menaces_nombreuses": ("Appareil exposé de façon répétée (navigation, supports amovibles, infection persistante).",
+                           "Analyser l'appareil en profondeur, identifier la source des détections et sensibiliser l'utilisateur.", "ESAY + client"),
+    "incompatible": ("Autre logiciel de sécurité ou application en conflit avec Kaspersky Endpoint Security.",
+                     "Désinstaller l'application incompatible (tâche de désinstallation à distance) puis vérifier la protection.", "ESAY"),
+    "vulnerabilites": ("Logiciels ou système non mis à jour.",
+                       "Appliquer les correctifs (voir la section Vulnérabilités) et planifier une gestion mensuelle des correctifs.", "ESAY + client"),
+    "maj_logicielles": ("Correctifs du système ou des applications non installés.",
+                        "Planifier l'installation des mises à jour (tâche de mise à jour ou Windows Update).", "ESAY + client"),
+    "chiffrement": ("Chiffrement non appliqué ou en erreur sur l'appareil.",
+                    "Vérifier la stratégie de chiffrement et l'état du chiffrement dans la console ; relancer le chiffrement.", "ESAY"),
+    "disque": ("Espace disque insuffisant pour les bases et les mises à jour.",
+               "Libérer de l'espace disque sur l'appareil.", "Client"),
+    "autre": ("État particulier signalé par l'application (voir le libellé exact ci-dessous).",
+              "Examiner l'état détaillé de l'appareil dans la console Kaspersky Security Center.", "ESAY"),
+}
+ORDRE_ETATS = {"Critique": 0, "Avertissement": 1}
 OS_FIN_SUPPORT = {
     "Windows 7": date(2020, 1, 14), "Windows 8": date(2023, 1, 10),
     "Windows 10": date(2025, 10, 14), "Windows Server 2008": date(2020, 1, 14),
@@ -99,9 +159,53 @@ def _date_incident(texte):
 # --------------------------------------------------------------------------- #
 # État de la protection
 # --------------------------------------------------------------------------- #
+def diagnostic_par_raison(appareils):
+    """Une ligne par raison : nombre d'appareils (critiques / avertissements), impact, cause probable, recommandation,
+    appareils concernés. Triée par impact puis par nombre d'appareils."""
+    lignes = {}
+    for a in appareils:
+        for cle in a["anomalies"]:
+            l = lignes.setdefault(cle, {"cle": cle, "libelle": LIBELLES_ANOMALIES.get(cle, cle), "impact": IMPACT_ANOMALIES.get(cle, "Modéré"),
+                                        "cause": DIAGNOSTIC_ANOMALIES.get(cle, DIAGNOSTIC_ANOMALIES["autre"])[0],
+                                        "recommandation": DIAGNOSTIC_ANOMALIES.get(cle, DIAGNOSTIC_ANOMALIES["autre"])[1],
+                                        "responsable": DIAGNOSTIC_ANOMALIES.get(cle, DIAGNOSTIC_ANOMALIES["autre"])[2],
+                                        "appareils": 0, "critiques": 0, "avertissements": 0, "noms": [], "serveurs": 0})
+            l["appareils"] += 1
+            l["critiques"] += a["etat"] == "Critique"
+            l["avertissements"] += a["etat"] == "Avertissement"
+            l["serveurs"] += bool(a.get("serveur"))
+            l["noms"].append(a["appareil"])
+    for l in lignes.values():
+        l["noms"].sort()
+    return sorted(lignes.values(), key=lambda l: (ORDRE_IMPACT.get(l["impact"], 9), -l["appareils"], l["libelle"]))
+
+
+def classement_etat_raison(appareils):
+    """Appareils regroupés par état puis par combinaison de raisons (ex. « plus administré + déconnecté »)."""
+    groupes = {}
+    for a in appareils:
+        cles = tuple(sorted(a["anomalies"], key=lambda k: (ORDRE_IMPACT.get(IMPACT_ANOMALIES.get(k, "Modéré"), 9), k)))
+        g = groupes.setdefault((a["etat"], cles), {"etat": a["etat"], "cles": list(cles), "noms": [], "serveurs": 0,
+                                                    "libelle": " + ".join(LIBELLES_ANOMALIES.get(k, k) for k in cles) or "Aucune raison indiquée"})
+        g["noms"].append(a["appareil"])
+        g["serveurs"] += bool(a.get("serveur"))
+    for g in groupes.values():
+        g["noms"].sort()
+        g["appareils"] = len(g["noms"])
+    return sorted(groupes.values(), key=lambda g: (ORDRE_ETATS.get(g["etat"], 9), -g["appareils"], g["libelle"]))
+
+
 def analyser_protection(p):
     genere = datetime.fromisoformat(p["genere_le"]).date() if p.get("genere_le") else None
-    appareils = p["appareils"]
+    # Les raisons brutes sont réanalysées à chaque consolidation : une amélioration de la lecture s'applique aux
+    # exports déjà déposés sans avoir à les redéposer.
+    from .lecture_ksc import analyser_raison
+    inconnues = Counter()
+    appareils = []
+    for a in p["appareils"]:
+        cles, phrases = analyser_raison(a.get("raison", ""), a.get("etat_application", ""))
+        inconnues.update(phrases)
+        appareils.append({**a, "anomalies": cles})
     total = p["nb_appareils"] or len(appareils)
     etats = Counter(a["etat"] for a in appareils)
     anomalies = Counter(x for a in appareils for x in a["anomalies"])
@@ -144,6 +248,9 @@ def analyser_protection(p):
         "os_obsoletes": obsoletes,
         "groupes": {g: dict(c) for g, c in sorted(groupes.items())},
         "appareils": appareils,
+        "diagnostic": diagnostic_par_raison(appareils),
+        "classement": classement_etat_raison(appareils),
+        "raisons_inconnues": inconnues.most_common(),
     }
 
 
@@ -269,6 +376,27 @@ def _incidents_ouverts(mdr):
     return [i for i in mdr["incidents"] if i["statut"].lower() not in ("closed", "resolved", "fermé")]
 
 
+# Couverture MDR : part du parc administré (KSC) qui transmet sa télémétrie au service MDR (maximum journalier du mois).
+# Un service MDR doit superviser la quasi-totalité du parc ; en dessous, des appareils échappent à la détection.
+SEUILS_COUVERTURE_MDR = ((0.95, "Normal"), (0.80, "À surveiller"), (0.50, "Élevé"), (0.0, "Critique"))
+
+
+def couverture_mdr(mdr, p):
+    """{"taux", "supervises", "administres", "hors_mdr", "statut"} ; « Non mesurée » si le parc KSC est inconnu."""
+    if not mdr:
+        return None
+    if not mdr.get("tenant_trouve", True) or not mdr.get("max"):
+        return {"taux": 0.0 if p and p.get("total") else None, "supervises": 0, "administres": p.get("total") if p else None,
+                "hors_mdr": p.get("total") if p else None, "statut": "Critique"}
+    if not p or not p.get("total"):
+        # sans export KSC, le parc total est inconnu : la couverture ne peut pas être jugée
+        return {"taux": None, "supervises": mdr["max"], "administres": None, "hors_mdr": None, "statut": "Non mesurée"}
+    taux = min(mdr["max"] / p["total"], 1.0)
+    statut = next(s for seuil, s in SEUILS_COUVERTURE_MDR if taux >= seuil)
+    return {"taux": taux, "supervises": mdr["max"], "administres": p["total"], "hors_mdr": max(p["total"] - mdr["max"], 0),
+            "statut": statut}
+
+
 def evaluer_risque(d):
     points, motifs = 0, []
     p, m, v, mdr = d["protection"], d["menaces"], d["vulnerabilites"], d["mdr"]
@@ -306,6 +434,12 @@ def evaluer_risque(d):
             points += 1; motifs.append(f"{len(ouverts)} incident(s) MDR en cours")
         if not mdr["tenant_trouve"] or mdr["max"] == 0:
             points += 2; motifs.append("aucun poste ne remonte de télémétrie au service MDR")
+        else:
+            c = couverture_mdr(mdr, p)
+            if c["taux"] is not None and c["taux"] < 0.80:
+                points += 2 if c["taux"] < 0.50 else 1
+                motifs.append(f"{c['hors_mdr']} {pluriel(c['hors_mdr'], 'appareil')} sur {c['administres']} hors de la "
+                              f"supervision MDR (couverture de {fmt_pct(c['supervises'], c['administres'])})")
 
     niveau = "Critique" if points >= 8 else "Élevé" if points >= 5 else "Modéré" if points >= 2 else "Faible"
     return {"niveau": niveau, "points": points, "motifs": motifs, "partiel": bool(d["exports_manquants"])}
@@ -319,6 +453,11 @@ def construire_actions(d):
     def ajouter(priorite, action, responsable, pourquoi):
         actions.append({"priorite": priorite, "action": action, "responsable": responsable, "pourquoi": pourquoi})
 
+    def noms(cle):
+        """Noms des appareils concernés quand ils sont peu nombreux (action directement exploitable)."""
+        liste = sorted(p["par_anomalie"].get(cle, [])) if p else []
+        return f" : {', '.join(liste)}" if 0 < len(liste) <= 5 else ""
+
     if mdr:
         if not mdr["tenant_trouve"] or mdr["max"] == 0:
             ajouter("Urgente", "Vérifier le déploiement et la connectivité des agents MDR", "ESAY + " + client,
@@ -330,11 +469,11 @@ def construire_actions(d):
         a = p["anomalies"]
         if a.get("protection_desactivee"):
             n = a["protection_desactivee"]
-            ajouter("Urgente", f"Réactiver la protection sur {n} {pluriel(n, 'appareil')}", "ESAY",
+            ajouter("Urgente", f"Réactiver la protection sur {n} {pluriel(n, 'appareil')}{noms('protection_desactivee')}", "ESAY",
                     "Ces appareils sont sans défense et peuvent propager une infection.")
         if a.get("non_installe"):
             n = a["non_installe"]
-            ajouter("Urgente", f"Installer Kaspersky Endpoint Security sur {n} {pluriel(n, 'appareil')}", "ESAY",
+            ajouter("Urgente", f"Installer Kaspersky Endpoint Security sur {n} {pluriel(n, 'appareil')}{noms('non_installe')}", "ESAY",
                     "Appareils totalement hors du périmètre de protection.")
         if a.get("ksn"):
             ajouter("Urgente", "Rétablir l'accès aux serveurs KSN (règles pare-feu / proxy vers les services Kaspersky)",
@@ -342,7 +481,7 @@ def construire_actions(d):
                     f"{a['ksn']} appareils privés de la détection cloud en temps réel ; cause principale des états critiques.")
         if a.get("non_administre"):
             n = a["non_administre"]
-            ajouter("Urgente", f"Réinstaller ou réaffecter l'agent d'administration sur {n} {pluriel(n, 'appareil')}", "ESAY",
+            ajouter("Urgente", f"Réinstaller ou réaffecter l'agent d'administration sur {n} {pluriel(n, 'appareil')}{noms('non_administre')}", "ESAY",
                     "Ces appareils ne reçoivent plus les politiques ni les mises à jour.")
         if a.get("deconnecte"):
             n = a["deconnecte"]
@@ -351,12 +490,24 @@ def construire_actions(d):
                     "ESAY + " + client, "Postes éteints, sortis du réseau ou agent défaillant : à confirmer avec le client.")
         if a.get("bases_depassees"):
             n = a["bases_depassees"]
-            ajouter("Haute", f"Mettre à jour les bases antivirus sur {n} {pluriel(n, 'appareil')}", "ESAY",
+            ajouter("Haute", f"Mettre à jour les bases antivirus sur {n} {pluriel(n, 'appareil')}{noms('bases_depassees')}", "ESAY",
                     "Des bases anciennes ne détectent pas les menaces récentes.")
         if a.get("analyse_ancienne"):
             n = a["analyse_ancienne"]
             ajouter("Haute", f"Lancer une analyse complète sur {n} {pluriel(n, 'appareil')} et planifier une analyse hebdomadaire automatique", "ESAY",
                     "Aucune analyse complète récente sur ces appareils.")
+        # Autres raisons d'état KSC : action tirée du diagnostic (cause / recommandation / responsable)
+        priorites = {"Très élevé": "Urgente", "Élevé": "Haute"}
+        for cle in ("objets_non_traites", "incompatible", "licence", "menaces_nombreuses", "chiffrement",
+                    "maj_logicielles", "redemarrage", "disque", "autre"):
+            if not a.get(cle):
+                continue
+            n, noms = a[cle], sorted(p["par_anomalie"].get(cle, []))
+            cause, reco, resp = DIAGNOSTIC_ANOMALIES[cle]
+            cible = f" ({', '.join(noms)})" if 0 < len(noms) <= 5 else ""
+            ajouter(priorites.get(IMPACT_ANOMALIES[cle], "Normale"),
+                    f"{LIBELLES_ANOMALIES[cle]} sur {n} {pluriel(n, 'appareil')}{cible} : {reco[0].lower() + reco[1:]}",
+                    resp.replace("client", client).replace("Client", client), cause)
         for o in p["os_obsoletes"]:
             n = o["appareils"]
             cible = f"de l'appareil sous {o['os']}" if n == 1 else f"des {n} appareils sous {o['os']}"

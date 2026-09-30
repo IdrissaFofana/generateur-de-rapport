@@ -123,6 +123,30 @@ def main():
                          and v2.contenu["synthese"].startswith("Synthèse **modifiée**"), "v2 créée avec les textes de la v1")
                 db.delete(v2)
                 db.commit()
+            r = op.post(f"/rapports/{rid}/mettre-a-jour", data={"csrf": jeton(op.get(f'/rapports/{rid}'))})
+            verifier(r.status_code == 403, "mise à jour d'un rapport validé réservée aux validateurs")
+            r = val.post(f"/rapports/{rid}/mettre-a-jour", data={"csrf": csrf}, follow_redirects=False)
+            rid3 = int(r.headers["location"].rsplit("/", 1)[1])
+            with Session() as db:
+                v3, v1 = db.get(Rapport, rid3), db.get(Rapport, rid)
+                verifier(v3.version == 2 and v3.statut == "brouillon" and not v3.contenu["synthese"].startswith("Synthèse **modifiée**")
+                         and v3.donnees["protection"].get("diagnostic") and v1.statut == "valide" and v1.pdf,
+                         "« Mettre à jour » : nouvelle version régénérée (textes et diagnostic), v1 validée archivée")
+            r = val.post(f"/rapports/{rid}/mettre-a-jour", data={"csrf": csrf}, follow_redirects=True)
+            verifier("existe déjà" in r.text, "mise à jour refusée tant qu'un brouillon existe (renvoi vers lui)")
+            with Session() as db:
+                db.delete(db.get(Rapport, rid3))
+                db.commit()
+            page_prod = val.get(f"/production?annee=2026&mois=9").text
+            verifier("Mettre à jour les rapports validés" in page_prod, "production : action groupée « Mettre à jour les rapports validés »")
+            r = val.post("/tableau/mettre-a-jour", data={"csrf": csrf, "annee": 2026, "mois": 9}, follow_redirects=True)
+            with Session() as db:
+                v = db.scalar(select(Rapport).where(Rapport.client_id == hudson.id, Rapport.annee == 2026, Rapport.mois == 9,
+                                                   Rapport.version == 2))
+                verifier("mis à jour en nouvelle version" in r.text and v is not None and v.statut == "brouillon",
+                         "action groupée : nouvelle version régénérée créée")
+                db.delete(v)
+                db.commit()
 
             octobre = f"/clients/{hudson.id}/2026/10"
             r = op.post(octobre + "/rapports", data={"csrf": jeton(op.get(octobre))}, follow_redirects=False)
@@ -137,11 +161,12 @@ def main():
                 h.close()
     finally:
         with Session() as db:
-            for r in db.scalars(select(Rapport).where(Rapport.client_id == hudson.id)):
+            ids = db.scalars(select(Utilisateur.id).where(Utilisateur.email.like(f"{PREFIXE}%"))).all()
+            # uniquement les rapports créés par les comptes d'essai : jamais ceux de la production
+            for r in db.scalars(select(Rapport).where(Rapport.cree_par_id.in_(ids))):
                 if r.pdf:
                     supprimer(r.pdf)
                 db.delete(r)
-            ids = db.scalars(select(Utilisateur.id).where(Utilisateur.email.like(f"{PREFIXE}%"))).all()
             db.execute(delete(Alerte).where(Alerte.id > alerte_max))
             db.execute(delete(Utilisateur).where(Utilisateur.id.in_(ids)))
             db.commit()

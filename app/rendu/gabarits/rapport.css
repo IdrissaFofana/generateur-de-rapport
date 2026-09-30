@@ -137,3 +137,7 @@ ul.puces li { margin-bottom: 3pt; }
 .signature .nom { font-weight: bold; color: var(--c1); }
 .signature .societe { color: var(--encre-douce); }
 .nobr { white-space: nowrap; }
+.st-non-mesuree { color: var(--attente); }
+table.diagnostic td, table.classement td { vertical-align: top; }
+table.diagnostic td:last-child { font-size: 8.4pt; }
+table.classement td.noms { font-size: 7.8pt; color: var(--encre-douce); }

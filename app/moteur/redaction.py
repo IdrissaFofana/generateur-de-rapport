@@ -56,7 +56,18 @@ def commentaire_mdr(d):
     texte = (f"Sur le mois, **{_virgule(mdr['moyenne_ouvres'])} postes** en moyenne ont transmis leur télémétrie "
              f"chaque jour ouvré (maximum {mdr['max']}).")
     if p and p["total"]:
+        from .analyse import couverture_mdr
         texte += f" Rapporté aux {p['total']} appareils administrés, le taux de couverture maximal est de {fmt_pct(mdr['max'], p['total'])}."
+        c = couverture_mdr(mdr, p)
+        if c["statut"] == "Normal":
+            texte += " La quasi-totalité du parc est supervisée."
+        elif c["statut"] == "À surveiller":
+            texte += (f" **{c['hors_mdr']} {pluriel(c['hors_mdr'], 'appareil')}** ne transmettent pas leur télémétrie : "
+                      "à vérifier (appareils éteints, retirés ou agent MDR absent).")
+        else:
+            texte += (f" **{c['hors_mdr']} appareils sur {c['administres']} échappent à la supervision MDR** : aucune "
+                      "détection ni réponse managée n'est assurée sur ces appareils. Il faut vérifier le déploiement de l'agent "
+                      "MDR, le nombre de licences et retirer de la console les appareils qui n'existent plus.")
     return texte
 
 

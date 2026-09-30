@@ -158,6 +158,13 @@ textes d'un rapport sont stockés en JSONB et **figés à la validation** (le PD
 - **Remplacement des exports** : le dernier export analysé d'un type remplace les précédents du même mois.
 - **Suivi des actions** : les actions encore ouvertes sont reprises dans le rapport suivant ; les points bloquants
   d'une intervention peuvent y être ajoutés.
+- **Diagnostic par raison** : la colonne « Raison » de l'export KSC est lue phrase par phrase et rapprochée d'une base
+  de règles (16 raisons : cause probable, recommandation, responsable). Le rapport présente un diagnostic par raison
+  et un classement des appareils par état et par combinaison de raisons ; une raison inconnue est signalée
+  telle quelle plutôt qu'ignorée. Cette base de règles constitue la référence à laquelle seront comparées les
+  recommandations rédigées par le modèle de langage (chapitre 7).
+- **Couverture MDR** : statut calculé sur la part du parc supervisée (≥ 95 % normal, < 50 % critique), et non sur la
+  seule présence de télémétrie.
 
 ### 4.5 Pilotage du portefeuille
 Vue d'ensemble, suivi du parc, contrats, alertes : description et captures ⏳.
@@ -195,7 +202,7 @@ Choix de conception (hiérarchie, typographie, motif hexagonal, couleurs validé
 daltonisme, petits multiples plutôt que doubles axes) ⏳ captures.
 
 ### 4.8 Tests
-Deux niveaux de tests. **Tests unitaires** (pytest, 43 tests) sur les fonctions pures : conformité TOTP aux
+Deux niveaux de tests. **Tests unitaires** (pytest, 46 tests) sur les fonctions pures : conformité TOTP aux
 vecteurs de la RFC 6238, détection de falsification du journal, limiteur de tentatives, règles métier (jours à
 venir, périodes des bilans, fins de support, séries d'anomalies). **Tests de bout en bout** (8 suites,
 220 vérifications) qui pilotent l'application réelle (client HTTP de test, vraie base, vrais fichiers PDF) :

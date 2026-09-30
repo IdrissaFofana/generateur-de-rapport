@@ -18,8 +18,13 @@
   <div class="en-ligne">
     {% if r.statut == "valide" %}
       {% if utilisateur.peut("validateur") and versions[0].id == r.id %}
-      <form method="post" action="/rapports/{{ r.id }}/nouvelle-version"><input type="hidden" name="csrf" value="{{ csrf }}">
-        <button class="bouton secondaire" type="submit">Créer une nouvelle version</button></form>
+      <form method="post" action="/rapports/{{ r.id }}/nouvelle-version"
+            data-confirmer="Créer une nouvelle version en gardant les textes de la v{{ r.version }} ? Les chiffres seront recalculés.">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="bouton secondaire" type="submit">Nouvelle version (garder mes textes)</button></form>
+      <form method="post" action="/rapports/{{ r.id }}/mettre-a-jour" data-confirmer-libelle="Mettre à jour"
+            data-confirmer="Mettre à jour ce bilan ? Une nouvelle version sera créée en brouillon, recalculée à partir des rapports mensuels validés, textes régénérés. La v{{ r.version }} reste archivée.">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><button class="bouton" type="submit">Mettre à jour</button></form>
       {% endif %}
       <a class="bouton" href="/rapports/{{ r.id }}/pdf">Télécharger le PDF</a>
     {% else %}
