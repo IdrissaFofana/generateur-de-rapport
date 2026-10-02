@@ -15,7 +15,8 @@ import fitz
 
 from .outils import date_ksc, dates_ksc, nettoyer
 
-DOSSIER_CACHE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".cache")
+# Emplacement configurable : en conteneur, le code est en lecture seule (CACHE_KSC_DIR sur le volume de données)
+DOSSIER_CACHE = os.environ.get("CACHE_KSC_DIR") or os.path.join(os.path.dirname(os.path.abspath(__file__)), ".cache")
 VERSION_CACHE = 3
 
 TYPES = {
@@ -282,7 +283,7 @@ def type_export(chemin):
 def _cle_cache(chemin):
     st = os.stat(chemin)
     brut = f"{VERSION_CACHE}|{os.path.abspath(chemin)}|{st.st_size}|{st.st_mtime_ns}"
-    return hashlib.sha1(brut.encode("utf-8")).hexdigest()
+    return hashlib.sha1(brut.encode("utf-8"), usedforsecurity=False).hexdigest()  # clé de cache, pas d'usage de sécurité
 
 
 def detecter_type(chemin):

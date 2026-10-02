@@ -1,0 +1,43 @@
+# Règles d'alerte de supervision (axe R3)
+groups:
+  - name: rapports-esay
+    rules:
+      - alert: PlateformeIndisponible
+        expr: up{job="rapports-esay"} == 0
+        for: 2m
+        labels: { gravite: critique }
+        annotations:
+          resume: "La plateforme ne répond plus au collecteur de métriques depuis 2 minutes."
+
+      - alert: JournalAuditCompromis
+        expr: rapports_esay_journal_integre == 0
+        labels: { gravite: critique }
+        annotations:
+          resume: "La chaîne d'empreintes du journal d'audit est rompue : le journal a été modifié hors de la plateforme."
+
+      - alert: ErreursServeur
+        expr: sum(rate(rapports_esay_requetes_total{statut="5xx"}[10m])) > 0.05
+        for: 10m
+        labels: { gravite: avertissement }
+        annotations:
+          resume: "Plus de 3 erreurs serveur par minute depuis 10 minutes."
+
+      - alert: AnalysesEnErreur
+        expr: sum(rapports_esay_analyses{statut="erreur"}) > 0
+        for: 30m
+        labels: { gravite: avertissement }
+        annotations:
+          resume: "Des fichiers déposés n'ont pas pu être analysés."
+
+      - alert: RequetesLentes
+        expr: histogram_quantile(0.95, sum by (le) (rate(rapports_esay_requete_duree_secondes_bucket{route!~"/rapports/.*pdf|/interventions/.*pdf|/service/.*pdf"}[15m]))) > 2
+        for: 15m
+        labels: { gravite: avertissement }
+        annotations:
+          resume: "95 % des pages répondent en plus de 2 secondes (hors génération de PDF)."
+
+      - alert: TentativesConnexionAnormales
+        expr: sum(increase(rapports_esay_requetes_total{route="/connexion",methode="POST",statut="2xx"}[10m])) > 30
+        labels: { gravite: avertissement }
+        annotations:
+          resume: "Plus de 30 formulaires de connexion refusés en 10 minutes (une connexion réussie redirige, 3xx)."

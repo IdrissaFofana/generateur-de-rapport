@@ -54,3 +54,10 @@ def verifier_lignes(lignes):
             return {"ok": False, "lignes": n, "rupture": {"id": l.id, "raison": "contenu modifié"}, "ancre": precedente}
         precedente = l.empreinte
     return {"ok": True, "lignes": n, "rupture": None, "ancre": precedente}
+
+
+def contient(db, empreinte_ancre):
+    """Une ancre (empreinte conservée hors de la base) figure-t-elle encore dans la chaîne ? Si non, des lignes ont été
+    supprimées en fin de journal après l'émission de cette ancre."""
+    from .modeles import Journal
+    return db.scalar(select(Journal.id).where(Journal.empreinte == empreinte_ancre)) is not None

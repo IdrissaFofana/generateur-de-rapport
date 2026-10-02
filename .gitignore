@@ -5,3 +5,8 @@ __pycache__/
 *.pyc
 .venv/
 export_serveur/
+
+# Déploiement : secrets et certificats hors du dépôt
+deploiement/.env
+deploiement/certificats/
+deploiement/supervision/jeton_metriques

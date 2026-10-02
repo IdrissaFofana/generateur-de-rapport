@@ -2,7 +2,7 @@
 import os
 import re
 import shutil
-import subprocess
+import subprocess  # nosec B404 : appel de WeasyPrint uniquement (sous Windows), arguments en liste
 import tempfile
 import unicodedata
 from datetime import date, datetime
@@ -56,15 +56,15 @@ def md(texte):
     if not texte:
         return Markup("")
     paragraphes = [p.strip() for p in re.split(r"\n\s*\n", texte) if p.strip()]
-    return Markup("".join(f"<p>{_gras(p).replace(chr(10), '<br>')}</p>" for p in paragraphes))
+    return Markup("".join(f"<p>{_gras(p).replace(chr(10), '<br>')}</p>" for p in paragraphes))  # nosec B704 : _gras échappe d'abord
 
 
 def md_ligne(texte):
-    return Markup(_gras(texte or ""))
+    return Markup(_gras(texte or ""))  # nosec B704 : _gras échappe le texte avant d'ajouter <strong>
 
 
 def statut(texte):
-    return Markup(f'<span class="st st-{_slug(texte)}">{escape(texte)}</span>')
+    return Markup(f'<span class="st st-{_slug(texte)}">{escape(texte)}</span>')  # nosec B704 : texte échappé, classe normalisée
 
 
 def fdate(iso):
@@ -245,7 +245,7 @@ def pdf_depuis_html(html):
             try:
                 with open(source, "w", encoding="utf-8") as f:
                     f.write(html)
-                subprocess.run([exe, "-e", "utf-8", source, sortie], check=True, capture_output=True)
+                subprocess.run([exe, "-e", "utf-8", source, sortie], check=True, capture_output=True)  # nosec B603 : exécutable de configuration, sans shell
             finally:
                 if os.path.exists(source):
                     os.remove(source)

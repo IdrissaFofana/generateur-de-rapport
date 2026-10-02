@@ -63,3 +63,9 @@ LIMITE_ECHECS_IP = int(os.environ.get("LIMITE_ECHECS_IP", "20"))
 FENETRE_ECHECS_IP_MINUTES = int(os.environ.get("FENETRE_ECHECS_IP_MINUTES", "15"))
 # Rôles pour lesquels la double authentification est obligatoire (ex. "admin,validateur") ; vide = facultative
 EXIGER_2FA_ROLES = _liste("EXIGER_2FA_ROLES")
+
+# Supervision (R3) : jeton d'accès à /metrics (vide = route désactivée) ; collecteur syslog / SIEM (vide = désactivé)
+METRIQUES_JETON = os.environ.get("METRIQUES_JETON", "")
+SYSLOG_HOTE = os.environ.get("SYSLOG_HOTE", "")
+SYSLOG_PORT = int(os.environ.get("SYSLOG_PORT", "514"))
+SYSLOG_PROTOCOLE = os.environ.get("SYSLOG_PROTOCOLE", "udp").lower()  # udp | tcp

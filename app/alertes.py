@@ -231,9 +231,11 @@ def envoyer_teams(titre, lignes, lien=None):
     if lien:
         carte["actions"] = [{"type": "Action.OpenUrl", "title": "Ouvrir la plateforme", "url": lien}]
     charge = {"type": "message", "attachments": [{"contentType": "application/vnd.microsoft.card.adaptive", "content": carte}]}
+    if not config.TEAMS_WEBHOOK.lower().startswith("https://"):
+        raise ValueError("TEAMS_WEBHOOK doit être une adresse https://")
     requete = urllib.request.Request(config.TEAMS_WEBHOOK, data=json.dumps(charge).encode("utf-8"),
                                      headers={"Content-Type": "application/json"}, method="POST")
-    with urllib.request.urlopen(requete, timeout=20) as reponse:
+    with urllib.request.urlopen(requete, timeout=20) as reponse:  # nosec B310 : schéma https:// vérifié ci-dessus
         if reponse.status >= 300:
             raise RuntimeError(f"Teams a répondu {reponse.status}")
 

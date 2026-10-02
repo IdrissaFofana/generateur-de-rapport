@@ -175,6 +175,7 @@ python -m outils_dev.essai_pilotage    # vue d'ensemble, parc, contrats, alertes
 python -m outils_dev.essai_interventions  # rapports d'intervention, bibliothèque, PDF, envoi, historique
 python -m outils_dev.essai_securite    # verrouillage, double authentification, sessions, journal chaîné
 python -m outils_dev.essai_service     # assistances, techniciens, import, connaissances, rapport du service
+python -m outils_dev.essai_supervision # métriques, journal vers syslog, événements de sécurité
 python -m pytest                        # tests unitaires (pip install -r requirements-dev.txt)
 ```
 

@@ -349,3 +349,88 @@ vérificateur devra retrouver dans le texte généré.
 - **Observation à traiter** : écart de 2 h entre les horodatages posés par PostgreSQL (`now()`, fuseau du serveur de
   base) et ceux posés par l'application (`datetime.now()`) : fuseaux horaires à aligner (serveur en UTC+0).
 - Tests : essai_rapports 23 vérifications (+5).
+
+## 30/09/2026 — Phase 2 : infrastructure (R1, R3, R4) 🔄
+
+**R3 — Supervision (dans l'application, testé)**
+- Route `/metrics` au format Prometheus, protégée par jeton (comparaison en temps constant) et **absente** si aucun
+  jeton n'est configuré ; jamais exposée par le proxy. Compteurs et histogramme des durées **par modèle de route**
+  (`/rapports/{rid}`, jamais l'URL réelle : cardinalité bornée, aucun identifiant dans les métriques) ; métriques
+  métier : analyses par statut, rapports, alertes ouvertes, imports en attente, intégrité du journal.
+- Journal d'audit émis vers syslog **après validation de la transaction** (événements SQLAlchemy `after_commit` /
+  `after_rollback`) avec l'empreinte de chaque ligne : le SIEM détient une copie de la chaîne. *Alternative écartée* :
+  émettre à l'écriture — une transaction annulée aurait laissé une ligne fantôme dans le SIEM.
+- **Troncature du journal** (limite relevée en phase 1) : ancre quotidienne émise (`gerer.py ancre-journal`) et
+  contrôle `verifier-journal --ancre` (code 3 si l'ancre a disparu).
+- Événements de sécurité au format clé=valeur stable (`evenement=echec_connexion ip=… compte="…"`), exploités par
+  fail2ban. Nouvelle suite `essai_supervision` : 12 vérifications.
+
+**R1 — Déploiement segmenté (configuration écrite et validée ; Docker absent du poste de développement)**
+- `Dockerfile` : image Python minimale, utilisateur non privilégié (uid 10001), code appartenant à root (non modifiable
+  par le processus), contrôle de santé. `docker-compose.yml` : 6 services, 6 réseaux ; seul le proxy publie des ports ;
+  réseaux `donnees`, `ia` et `supervision` **internes** (aucune sortie) ; conteneurs en lecture seule, capacités
+  retirées, `no-new-privileges`, limites de ressources. Validation : analyse YAML et contrôle des propriétés de chaque
+  service ; scripts shell vérifiés (`sh -n`).
+- Nginx : TLS 1.2/1.3 uniquement, HSTS, CSP, X-Frame-Options, limitation de débit sur `/connexion` (10/min), en-tête
+  X-Forwarded-For **remplacé** (non ajouté) pour empêcher l'usurpation d'adresse.
+- *Point relevé* : derrière un proxy en conteneur, l'application verrait l'adresse du proxy pour tous les clients ;
+  la limitation des tentatives par IP bloquerait alors tout le monde. Parade : `--proxy-headers` avec
+  `--forwarded-allow-ips` limité à l'adresse fixe du proxy.
+- *Obstacles de configuration* : le code écrivait un cache dans son propre dossier (incompatible avec la lecture
+  seule) → emplacement configurable sur le volume de données ; Docker ne publie pas de port pour un conteneur relié
+  uniquement à des réseaux internes → réseau « console » dédié à Prometheus, lié à 127.0.0.1.
+
+**R4 — Durcissement (fichiers prêts)** : SSH par clé uniquement, nftables en refus par défaut, fail2ban (filtre testé
+sur le format réel des événements), service systemd durci, scripts `verifier-deploiement.sh` (contrôles boîte noire :
+exposition, TLS, en-têtes, isolement, journal) et `audit-securite.sh` (Lynis, systemd-analyze, Docker Bench,
+testssl.sh, bandit, pip-audit) pour les mesures avant / après.
+
+**S6 — Analyse statique (mesure)**
+
+| Outil | Avant | Après |
+|---|---|---|
+| bandit — gravité haute | 1 (SHA-1) | 0 |
+| bandit — gravité moyenne | 5 (4 « XSS » Markup, 1 urlopen) | 0 |
+| bandit — gravité basse | 2 (subprocess) | 0 |
+| pip-audit — dépendances vulnérables connues | 0 | 0 |
+
+Analyse des 8 alertes : **aucune vulnérabilité réelle**. Les 4 « XSS » sont des faux positifs (données échappées
+avant marquage sûr, vérifié dans le code) ; SHA-1 sert de clé de cache (`usedforsecurity=False`) ; l'URL Teams est
+désormais contrainte à `https://` ; l'appel de WeasyPrint se fait sans shell, arguments en liste. Faux positifs
+annotés avec leur justification (`# nosec`). *Enseignement* : un outil SAST sans lecture humaine produit du bruit
+(100 % de faux positifs ou d'alertes sans risque ici).
+
+**Reste à faire sur le serveur** : mise en service des conteneurs, `verifier-deploiement.sh`, audits avant / après
+(Lynis, systemd-analyze, Docker Bench, testssl.sh), OWASP ZAP.
+
+Tests : 46 unitaires ; 9 suites, 237 vérifications.
+
+## 02/10/2026 — Titre définitif
+
+- **Titre retenu** : *Génération vérifiable de rapports de cybersécurité par un modèle de langage local : application
+  à une plateforme sécurisée de pilotage d'un service de sécurité managée (MDR/EDR).*
+- *Motif* : placer la question de recherche (LLM local + vérification des faits) en tête plutôt que l'outil ; la
+  plateforme est le terrain d'application. Objectif complémentaire : candidature en doctorat → priorité à la solidité
+  du chapitre 7 et à un article tiré de ses résultats.
+- **Titre définitif soumis à l'encadrant** : *Intelligence artificielle pour le reporting de cybersécurité : détection
+  d'anomalies et génération vérifiable de rapports par un grand modèle de langage (LLM) local dans un service MDR/EDR.*
+  Il remplace la formulation précédente. *Point de vigilance* : la plateforme ne détecte aujourd'hui les anomalies
+  que par règles fixes (statuts KSC, seuils d'alerte) ; le titre engage à réaliser et évaluer une détection apprise
+  (ML1), désormais obligatoire en phase 4.
+
+## 02/10/2026 — Plan contraignant du mémoire
+
+- Création de `PLAN_MEMOIRE.md`, document de référence : le titre engage trois questions de recherche (QR1 détection
+  d'anomalies, QR2 génération vérifiable par LLM local, QR3 injection de prompt indirecte), chacune avec son
+  chapitre, ses hypothèses réfutables (H1 à H5) et un critère de fin ; H6 pour l'apport professionnel.
+- **Recentrage** : la plateforme devient le terrain d'expérimentation (chapitre 3) ; service technique, import,
+  bibliothèque → annexe B ; ML2, ML4, LLM6, R2, S5 → perspectives. Règle : une nouvelle fonctionnalité pour
+  l'entreprise n'entre dans le mémoire que si elle remplit le critère de fin d'une section.
+- `CONTENU_MEMOIRE.md` réorganisé selon ce plan (texte existant conservé et déplacé).
+- Ordre de travail sur 16 semaines ; le chapitre 5 (contribution principale) est prioritaire en cas de manque de temps.
+- **Structure imposée par l'établissement : 3 parties de 3 chapitres.** Partie I « Cadre de l'étude » (1 contexte et
+  problématique, 2 état de l'art supervision et détection d'anomalies, 3 état de l'art LLM et sécurité des LLM) ;
+  partie II « Conception et réalisation » (4 plateforme et référence par règles, 5 sécurité et déploiement,
+  6 modules d'IA) ; partie III « Expérimentations et résultats » (7 QR1, 8 QR2, 9 QR3 + apport professionnel +
+  discussion). Chaque question de recherche a désormais une section de conception (chapitre 6) et un chapitre
+  d'évaluation. `PLAN_MEMOIRE.md` et `CONTENU_MEMOIRE.md` réorganisés, texte existant intégralement conservé.

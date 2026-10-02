@@ -84,7 +84,7 @@ def mini_courbe(points, cle):
     vx, vy = x(dernier), y(valeurs[dernier])
     morceaux.append(f'<text class="valeur" x="{vx + 8:.1f}" y="{vy + 4:.1f}">{_nb(valeurs[dernier])}</text>')
     morceaux.append("</svg>")
-    return Markup("".join(morceaux))
+    return Markup("".join(morceaux))  # nosec B704 : nombres formatés et libellés passés par escape()
 
 
 def variation(points, cle):

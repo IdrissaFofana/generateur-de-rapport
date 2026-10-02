@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as SessionDB
 
 from .. import totp
+from ..supervision import evenement_securite
 from ..db import session_db
 from ..modeles import Utilisateur, journaliser
 from ..securite import (adresse_ip, compte_verrouille, enregistrer_echec, hacher, limiteur_ip, mot_de_passe_valide,
@@ -32,6 +33,7 @@ def _connecter(request, db, u):
     u.echecs_connexion, u.bloque_jusqua, u.derniere_connexion = 0, None, datetime.now()
     limiteur_ip.reinitialiser(adresse_ip(request))
     ouvrir_session(request, u)
+    evenement_securite("connexion", adresse_ip(request), u.email, "2fa" if u.totp_actif else "mot de passe")
     journaliser(db, u, "connexion", f"depuis {adresse_ip(request)}" + (" (double authentification)" if u.totp_actif else ""))
     db.commit()
     return rediriger("/mon-compte" if u.doit_changer_mdp else accueil(u))
@@ -41,6 +43,9 @@ def _echec(request, db, u, email, etape):
     ip = adresse_ip(request)
     limiteur_ip.echec(ip)
     verrouille = enregistrer_echec(u) if u is not None else False
+    evenement_securite("echec_connexion", ip, email or "inconnu", etape)
+    if verrouille:
+        evenement_securite("compte_verrouille", ip, email)
     journaliser(db, u, "échec de connexion", f"{etape} · {email} · depuis {ip}", acteur=email or "inconnu")
     if verrouille:
         journaliser(db, u, "compte verrouillé", f"{email} après échecs répétés · depuis {ip}", acteur=email)
@@ -60,6 +65,7 @@ def connexion(request: Request, email: str = Form(...), mot_de_passe: str = Form
               db: SessionDB = Depends(session_db)):
     email = email.strip().lower()
     if limiteur_ip.bloque(adresse_ip(request)):
+        evenement_securite("ip_bloquee", adresse_ip(request), email or "inconnu", "trop d'échecs")
         journaliser(db, None, "connexion refusée", f"trop d'échecs depuis {adresse_ip(request)}", acteur=email or "inconnu")
         db.commit()
         return page(request, "connexion.html", erreur=ECHEC, email=email)

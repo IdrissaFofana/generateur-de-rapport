@@ -1,0 +1,55 @@
+# Service systemd durci (déploiement sans conteneurs, axe R4).
+# Installation : sudo cp rapports-esay.service /etc/systemd/system/ && sudo systemctl daemon-reload
+# Mesure :       systemd-analyze security rapports-esay.service   (score d'exposition, avant / après)
+[Unit]
+Description=Rapports de sécurité ESAY
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=rapports
+Group=rapports
+WorkingDirectory=/srv/rapports-esay
+EnvironmentFile=/srv/rapports-esay/.env
+Environment=MPLCONFIGDIR=/tmp/matplotlib HOME=/tmp CACHE_KSC_DIR=/srv/rapports-esay/donnees/.cache-ksc
+ExecStart=/srv/rapports-esay/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8010 --workers 1 --proxy-headers --no-server-header
+Restart=on-failure
+RestartSec=5
+
+# --- Système de fichiers : tout en lecture seule, sauf les données
+ProtectSystem=strict
+ReadWritePaths=/srv/rapports-esay/donnees
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+UMask=0077
+# --- Privilèges
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictRealtime=true
+RestrictNamespaces=true
+ProtectClock=true
+ProtectHostname=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectProc=invisible
+ProcSubset=pid
+RemoveIPC=true
+# --- Réseau : IPv4/IPv6 et sockets locales uniquement
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# --- Appels système : profil « service » standard, sans les appels privilégiés
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged
+SystemCallArchitectures=native
+# --- Ressources
+MemoryMax=2G
+TasksMax=256
+
+[Install]
+WantedBy=multi-user.target

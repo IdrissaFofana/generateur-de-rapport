@@ -1,0 +1,16 @@
+# Rien de sensible ni d'inutile dans l'image : données, secrets, exemples clients, outils de développement
+.env
+.env.*
+!.env.example
+donnees/
+export_serveur/
+exemples/
+memoire/
+outils_dev/
+tests/
+deploiement/
+**/__pycache__/
+**/.cache/
+*.pyc
+.git/
+.pytest_cache/
